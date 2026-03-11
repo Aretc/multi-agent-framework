@@ -743,6 +743,44 @@ class MultiAgentFramework {
     return await llm.embed(text);
   }
 
+  async streamChat(agentName, messages, onChunk, options) {
+    options = options || {};
+    const llm = this.createLLM(options.llm || {});
+    
+    const context = this.buildAgentContext(agentName);
+    if (context) {
+      messages = [
+          { role: 'system', content: context.systemPrompt || 'You are a helpful AI assistant.' },
+          { role: 'system', content: 'Recent context: ' + context.recentMemory.join('\n') },
+          ...messages
+        ];
+      }
+    }
+
+    const response = await llm.stream(messages, onChunk, options);
+    
+    if (this.memory) {
+      const memory = this.getAgentMemory(agentName);
+      if (memory) {
+        await memory.recordEvent({
+          type: 'llm_chat',
+          action: 'LLM stream chat interaction',
+          details: { 
+            messageCount: messages.length, 
+            responseLength: response.content ? response.content.length : 0 
+          }
+        });
+      }
+    }
+    
+    return response;
+  }
+
+  saveConfig() {
+    const configPath = path.join(this.rootDir, 'maf.config.json');
+    fs.writeFileSync(configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+  }
+
   // Tool Methods
   registerTool(config) {
     if (!this.toolManager) {

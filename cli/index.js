@@ -88,7 +88,13 @@ function showHelp() {
   console.log('');
   console.log('  LLM:');
   console.log('    llm chat <agent> <message>         Chat with agent using LLM');
+  console.log('    llm stream <agent> <message>       Stream chat response');
   console.log('    llm config                         Show LLM configuration');
+  console.log('    llm providers                      List available providers');
+  console.log('    llm models                         List known models');
+  console.log('    llm set-provider <provider>        Set LLM provider');
+  console.log('    llm set-model <model>              Set LLM model');
+  console.log('    llm test                           Test LLM connection');
   console.log('');
   console.log('  Tools:');
   console.log('    tool list                          List available tools');
@@ -972,6 +978,144 @@ function showLLMConfig() {
   console.log('API Key: ' + (llmConfig.apiKey ? '***configured***' : 'not set'));
   console.log('Temperature: ' + (llmConfig.temperature || 0.7));
   console.log('Max Tokens: ' + (llmConfig.maxTokens || 4096));
+  console.log('Timeout: ' + (llmConfig.timeout || 120000) + 'ms');
+  console.log('Max Retries: ' + (llmConfig.maxRetries || 3));
+}
+
+function listLLMProviders() {
+  const { LLM_PROVIDERS, DEFAULT_MODELS } = require('../core/llm/adapter');
+  
+  console.log('\n=== Available LLM Providers ===\n');
+  console.log('  openai     - OpenAI (GPT-4, GPT-3.5)');
+  console.log('  anthropic  - Anthropic (Claude)');
+  console.log('  ollama     - Ollama (Local models)');
+  console.log('  lmstudio   - LM Studio (Local models)');
+  console.log('  mock       - Mock adapter (testing)');
+  console.log('');
+  console.log('Default models:');
+  Object.entries(DEFAULT_MODELS).forEach(function([provider, model]) {
+    console.log('  ' + provider + ': ' + model);
+  });
+}
+
+function listLLMModels() {
+  const { MODEL_CONTEXT_SIZES } = require('../core/llm/adapter');
+  
+  console.log('\n=== Known Models & Context Sizes ===\n');
+  Object.entries(MODEL_CONTEXT_SIZES).forEach(function([model, size]) {
+    console.log('  ' + model + ': ' + size.toLocaleString() + ' tokens');
+  });
+  console.log('\nNote: You can use any model supported by your provider.');
+}
+
+async function setLLMProvider() {
+  const provider = args[2];
+  if (!provider) {
+    console.log('Usage: maf llm set-provider <provider>');
+    console.log('Providers: openai, anthropic, ollama, lmstudio, mock');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  framework.config.llm = framework.config.llm || {};
+  framework.config.llm.provider = provider;
+  framework.saveConfig();
+  
+  console.log('LLM provider set to: ' + provider);
+  console.log('Remember to set your API key if required:');
+  if (provider === 'openai') {
+    console.log('  Set OPENAI_API_KEY environment variable or add to config');
+  } else if (provider === 'anthropic') {
+    console.log('  Set ANTHROPIC_API_KEY environment variable or add to config');
+  }
+}
+
+async function setLLMModel() {
+  const model = args[2];
+  if (!model) {
+    console.log('Usage: maf llm set-model <model>');
+    console.log('Example: maf llm set-model gpt-4o');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  framework.config.llm = framework.config.llm || {};
+  framework.config.llm.model = model;
+  framework.saveConfig();
+  
+  console.log('LLM model set to: ' + model);
+}
+
+async function testLLMConnection() {
+  const framework = getFramework();
+  const llmConfig = framework.config.llm || {};
+  
+  console.log('\n=== Testing LLM Connection ===\n');
+  console.log('Provider: ' + (llmConfig.provider || 'mock'));
+  console.log('Model: ' + (llmConfig.model || 'default'));
+  console.log('');
+  
+  try {
+    const response = await framework.chat('test-agent', [
+      { role: 'user', content: 'Say "Hello, World!" in exactly those words.' }
+    ]);
+    
+    console.log('✅ Connection successful!');
+    console.log('');
+    console.log('Response: ' + response.content);
+    console.log('');
+    console.log('Model: ' + response.model);
+    console.log('Tokens: ' + (response.usage?.input_tokens || 0) + ' in / ' + (response.usage?.output_tokens || 0) + ' out');
+  } catch (e) {
+    console.log('❌ Connection failed!');
+    console.log('Error: ' + e.message);
+    console.log('');
+    console.log('Troubleshooting:');
+    if (llmConfig.provider === 'openai') {
+      console.log('  - Check that OPENAI_API_KEY is set');
+      console.log('  - Verify your API key is valid');
+    } else if (llmConfig.provider === 'anthropic') {
+      console.log('  - Check that ANTHROPIC_API_KEY is set');
+      console.log('  - Verify your API key is valid');
+    } else if (llmConfig.provider === 'ollama') {
+      console.log('  - Ensure Ollama is running (ollama serve)');
+      console.log('  - Check that the model is installed (ollama pull <model>)');
+    } else if (llmConfig.provider === 'lmstudio') {
+      console.log('  - Ensure LM Studio is running with a model loaded');
+      console.log('  - Check the server is on port 1234');
+    }
+  }
+}
+
+async function streamLLMChat() {
+  const agentName = args[2];
+  const message = args[3];
+  if (!agentName || !message) {
+    console.log('Usage: maf llm stream <agent> <message>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  console.log('\n=== Streaming Response ===\n');
+  console.log('Agent: ' + agentName);
+  console.log('Message: ' + message);
+  console.log('');
+  console.log('--- Response ---');
+  
+  try {
+    const response = await framework.streamChat(agentName, [
+      { role: 'user', content: message }
+    ], function(chunk, accumulated) {
+      process.stdout.write(chunk);
+    });
+    
+    console.log('\n\n--- End ---');
+    console.log('Model: ' + response.model);
+    console.log('Tokens: ' + (response.usage?.input_tokens || 0) + ' in / ' + (response.usage?.output_tokens || 0) + ' out');
+  } catch (e) {
+    console.log('\nError: ' + e.message);
+  }
 }
 
 function listTools() {
@@ -1621,8 +1765,14 @@ switch (command) {
   case 'llm':
     var subCmd = args[1];
     if (subCmd === 'chat') llmChat();
+    else if (subCmd === 'stream') streamLLMChat();
     else if (subCmd === 'config') showLLMConfig();
-    else console.log('Unknown llm command. Use: chat, config');
+    else if (subCmd === 'providers') listLLMProviders();
+    else if (subCmd === 'models') listLLMModels();
+    else if (subCmd === 'set-provider') setLLMProvider();
+    else if (subCmd === 'set-model') setLLMModel();
+    else if (subCmd === 'test') testLLMConnection();
+    else console.log('Unknown llm command. Use: chat, stream, config, providers, models, set-provider, set-model, test');
     break;
   case 'tool':
     var subCmd = args[1];
