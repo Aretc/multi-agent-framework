@@ -55,6 +55,13 @@ const translations = {
     assign: 'Assign', unassign: 'Unassign',
     addTool: 'Add Tool', toolHandler: 'Handler Code', toolHandlerPlaceholder: 'async (params) => {\n  // Your code here\n  return params;\n}',
     toolCreated: 'Tool created', toolDeleted: 'Tool deleted',
+    llmPanel: 'LLM Configuration', llmProvider: 'Provider', llmModel: 'Model', llmApiKey: 'API Key',
+    llmBaseUrl: 'Base URL', llmTemperature: 'Temperature', llmMaxTokens: 'Max Tokens',
+    llmTimeout: 'Timeout (ms)', llmMaxRetries: 'Max Retries', llmConfigured: 'Configured',
+    llmNotConfigured: 'Not Configured', llmTest: 'Test Connection', llmSave: 'Save Config',
+    llmProviders: 'Providers', openai: 'OpenAI', anthropic: 'Anthropic', ollama: 'Ollama',
+    lmstudio: 'LM Studio', mock: 'Mock (Testing)', llmTestSuccess: 'Connection successful',
+    llmTestFailed: 'Connection failed', llmConfigSaved: 'Configuration saved',
   },
   zh: {
     dashboard: '仪表盘', agents: '智能体', tasks: '任务', sessions: '会话',
@@ -105,6 +112,13 @@ const translations = {
     assign: '分配', unassign: '取消分配',
     addTool: '添加工具', toolHandler: '处理函数代码', toolHandlerPlaceholder: 'async (params) => {\n  // 在这里编写代码\n  return params;\n}',
     toolCreated: '工具已创建', toolDeleted: '工具已删除',
+    llmPanel: 'LLM 配置', llmProvider: '提供商', llmModel: '模型', llmApiKey: 'API 密钥',
+    llmBaseUrl: '基础 URL', llmTemperature: '温度', llmMaxTokens: '最大 Token',
+    llmTimeout: '超时 (ms)', llmMaxRetries: '最大重试', llmConfigured: '已配置',
+    llmNotConfigured: '未配置', llmTest: '测试连接', llmSave: '保存配置',
+    llmProviders: '提供商', openai: 'OpenAI', anthropic: 'Anthropic', ollama: 'Ollama',
+    lmstudio: 'LM Studio', mock: 'Mock (测试)', llmTestSuccess: '连接成功',
+    llmTestFailed: '连接失败', llmConfigSaved: '配置已保存',
   }
 };
 
@@ -212,6 +226,7 @@ function App() {
   const [skills, setSkills] = useState([]);
   const [rules, setRules] = useState([]);
   const [mcpClients, setMcpClients] = useState([]);
+  const [llmConfig, setLLMConfig] = useState({ provider: 'mock', model: '', apiKey: '', baseUrl: '', temperature: 0.7, maxTokens: 4096, timeout: 120000, maxRetries: 3 });
   const [toast, setToast] = useState(null);
   
   const [showAddAgent, setShowAddAgent] = useState(false);
@@ -254,6 +269,7 @@ function App() {
     fetch(`${API_BASE}/skills`).then(res => res.json()).then(d => d.success && setSkills(d.data || [])).catch(e => addLog('error', e.message));
     fetch(`${API_BASE}/rules`).then(res => res.json()).then(d => d.success && setRules(d.data || [])).catch(e => addLog('error', e.message));
     fetch(`${API_BASE}/mcp/clients`).then(res => res.json()).then(d => d.success && setMcpClients(d.data || [])).catch(e => addLog('error', e.message));
+    fetch(`${API_BASE}/llm/config`).then(res => res.json()).then(d => d.success && setLLMConfig(d.data || llmConfig)).catch(e => addLog('error', e.message));
   }, [addLog]);
 
   useEffect(() => { fetchData(); const i = setInterval(fetchData, 5000); return () => clearInterval(i); }, [fetchData]);
@@ -665,13 +681,105 @@ function App() {
     </div>
   );
 
+  const handleTestLLM = () => {
+    fetch(`${API_BASE}/llm/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(llmConfig) })
+      .then(res => res.json())
+      .then(d => {
+        if (d.success) {
+          showToast(t.llmTestSuccess, 'success');
+          addLog('info', t.llmTestSuccess);
+        } else {
+          showToast(t.llmTestFailed + ': ' + (d.error || ''), 'error');
+          addLog('error', t.llmTestFailed + ': ' + (d.error || ''));
+        }
+      })
+      .catch(e => {
+        showToast(t.llmTestFailed, 'error');
+        addLog('error', e.message);
+      });
+  };
+
+  const handleSaveLLM = () => {
+    fetch(`${API_BASE}/llm/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(llmConfig) })
+      .then(res => res.json())
+      .then(d => {
+        if (d.success) {
+          showToast(t.llmConfigSaved, 'success');
+          addLog('info', t.llmConfigSaved);
+        } else {
+          showToast(d.error || 'Error', 'error');
+        }
+      })
+      .catch(e => addLog('error', e.message));
+  };
+
+  const renderLLM = () => (
+    <div style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <h2 style={styles.panelTitle}>{t.llmPanel}</h2>
+      </div>
+      <div style={styles.card}>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>{t.llmProvider}</label>
+          <select style={styles.select} value={llmConfig.provider} onChange={e => setLLMConfig({ ...llmConfig, provider: e.target.value })}>
+            <option value="mock">{t.mock}</option>
+            <option value="openai">{t.openai}</option>
+            <option value="anthropic">{t.anthropic}</option>
+            <option value="ollama">{t.ollama}</option>
+            <option value="lmstudio">{t.lmstudio}</option>
+          </select>
+        </div>
+        <div style={styles.formGroup}>
+          <label style={styles.label}>{t.llmModel}</label>
+          <input style={styles.input} value={llmConfig.model} onChange={e => setLLMConfig({ ...llmConfig, model: e.target.value })} placeholder="gpt-4o, claude-3-5-sonnet-20241022, llama3.2..." />
+        </div>
+        {(llmConfig.provider === 'openai' || llmConfig.provider === 'anthropic') && (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmApiKey}</label>
+            <input style={styles.input} type="password" value={llmConfig.apiKey} onChange={e => setLLMConfig({ ...llmConfig, apiKey: e.target.value })} placeholder="sk-..." />
+          </div>
+        )}
+        {(llmConfig.provider === 'ollama' || llmConfig.provider === 'lmstudio') && (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmBaseUrl}</label>
+            <input style={styles.input} value={llmConfig.baseUrl} onChange={e => setLLMConfig({ ...llmConfig, baseUrl: e.target.value })} placeholder={llmConfig.provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234'} />
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmTemperature}</label>
+            <input style={styles.input} type="number" step="0.1" min="0" max="2" value={llmConfig.temperature} onChange={e => setLLMConfig({ ...llmConfig, temperature: parseFloat(e.target.value) })} />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmMaxTokens}</label>
+            <input style={styles.input} type="number" value={llmConfig.maxTokens} onChange={e => setLLMConfig({ ...llmConfig, maxTokens: parseInt(e.target.value) })} />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmTimeout}</label>
+            <input style={styles.input} type="number" value={llmConfig.timeout} onChange={e => setLLMConfig({ ...llmConfig, timeout: parseInt(e.target.value) })} />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.llmMaxRetries}</label>
+            <input style={styles.input} type="number" value={llmConfig.maxRetries} onChange={e => setLLMConfig({ ...llmConfig, maxRetries: parseInt(e.target.value) })} />
+          </div>
+        </div>
+        <div style={{ ...styles.formGroup, display: 'flex', gap: '12px', marginTop: '16px' }}>
+          <button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={handleTestLLM}>{t.llmTest}</button>
+          <button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleSaveLLM}>{t.llmSave}</button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.logo}>🤖 MAF Dashboard</div>
         <nav style={styles.nav}>
-          {['dashboard', 'agents', 'tasks', 'sessions', 'tools', 'skills', 'rules', 'mcp'].map(v => (
-            <button key={v} style={{ ...styles.navBtn, ...(view === v ? styles.navBtnActive : {}) }} onClick={() => setView(v)}>{t[v]}</button>
+          {['dashboard', 'agents', 'tasks', 'sessions', 'tools', 'skills', 'rules', 'mcp', 'llm'].map(v => (
+            <button key={v} style={{ ...styles.navBtn, ...(view === v ? styles.navBtnActive : {}) }} onClick={() => setView(v)}>{t[v] || v}</button>
           ))}
           <button style={styles.langBtn} onClick={() => setLang(lang === 'en' ? 'zh' : 'en')}>{lang === 'en' ? '中文' : 'EN'}</button>
         </nav>
@@ -685,6 +793,7 @@ function App() {
         {view === 'skills' && renderSkills()}
         {view === 'rules' && renderRules()}
         {view === 'mcp' && renderMCP()}
+        {view === 'llm' && renderLLM()}
       </main>
 
       <Modal isOpen={showAddAgent} onClose={() => setShowAddAgent(false)} title={t.addAgent}>

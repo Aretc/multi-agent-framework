@@ -350,12 +350,41 @@ function createApp(options) {
       success: true,
       data: {
         provider: config.provider || 'mock',
-        model: config.model || 'default',
-        temperature: config.temperature || 0.7,
+        model: config.model || '',
+        apiKey: config.apiKey ? '***configured***' : '',
+        baseUrl: config.baseUrl || '',
+        temperature: config.temperature !== undefined ? config.temperature : 0.7,
         maxTokens: config.maxTokens || 4096,
-        configured: !!config.apiKey
+        timeout: config.timeout || 120000,
+        maxRetries: config.maxRetries || 3
       }
     });
+  });
+
+  app.post('/api/llm/config', function(req, res) {
+    try {
+      framework.config.llm = framework.config.llm || {};
+      Object.assign(framework.config.llm, req.body);
+      if (framework.saveConfig) {
+        framework.saveConfig();
+      }
+      res.json({ success: true, data: framework.config.llm });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/llm/test', async function(req, res) {
+    try {
+      const config = req.body;
+      const llm = framework.createLLM(config);
+      const response = await llm.chat([
+        { role: 'user', content: 'Say "OK" if you can hear me.' }
+      ]);
+      res.json({ success: true, data: { response: response.content } });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   app.post('/api/llm/chat', async function(req, res) {
