@@ -269,10 +269,14 @@ function App() {
     fetch(`${API_BASE}/skills`).then(res => res.json()).then(d => d.success && setSkills(d.data || [])).catch(e => addLog('error', e.message));
     fetch(`${API_BASE}/rules`).then(res => res.json()).then(d => d.success && setRules(d.data || [])).catch(e => addLog('error', e.message));
     fetch(`${API_BASE}/mcp/clients`).then(res => res.json()).then(d => d.success && setMcpClients(d.data || [])).catch(e => addLog('error', e.message));
-    fetch(`${API_BASE}/llm/config`).then(res => res.json()).then(d => d.success && setLLMConfig(d.data || llmConfig)).catch(e => addLog('error', e.message));
   }, [addLog]);
 
   useEffect(() => { fetchData(); const i = setInterval(fetchData, 5000); return () => clearInterval(i); }, [fetchData]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/llm/config`).then(res => res.json()).then(d => d.success && setLLMConfig(d.data || llmConfig)).catch(e => addLog('error', e.message));
+  }, []);
+
   useEffect(() => {
     socket.on('connected', () => addLog('info', t.connected));
     socket.on('task:created', task => { addLog('info', `${t.taskCreated}: ${task.title}`); fetchData(); });
