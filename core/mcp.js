@@ -182,13 +182,17 @@ class MCPClient extends EventEmitter {
 
   handleMessage(message) {
     if (message.id !== undefined && this.pendingRequests.has(message.id)) {
-      const { resolve, reject } = this.pendingRequests.get(message.id);
+      const pending = this.pendingRequests.get(message.id);
       this.pendingRequests.delete(message.id);
+      
+      if (pending.timeoutId) {
+        clearTimeout(pending.timeoutId);
+      }
 
       if (message.error) {
-        reject(new Error(message.error.message || 'MCP request failed'));
+        pending.reject(new Error(message.error.message || 'MCP request failed'));
       } else {
-        resolve(message.result);
+        pending.resolve(message.result);
       }
     } else if (message.method) {
       this.emit('notification', message);
@@ -215,31 +219,37 @@ class MCPClient extends EventEmitter {
   }
 
   sendRequest(method, params) {
-    return new Promise((resolve, reject) => {
-      const id = ++this.requestId;
+    const self = this;
+    return new Promise(function(resolve, reject) {
+      const id = ++self.requestId;
       
       const message = JSON.stringify({
         jsonrpc: '2.0',
-        id,
-        method,
-        params
+        id: id,
+        method: method,
+        params: params
       }) + '\n';
 
-      this.pendingRequests.set(id, { resolve, reject });
-
-      try {
-        this.process.stdin.write(message);
-      } catch (error) {
-        this.pendingRequests.delete(id);
-        reject(error);
-      }
-
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
+      const timeoutId = setTimeout(function() {
+        if (self.pendingRequests.has(id)) {
+          self.pendingRequests.delete(id);
+          reject(new Error('Request timeout after 30s'));
         }
       }, 30000);
+
+      self.pendingRequests.set(id, { 
+        resolve: resolve, 
+        reject: reject, 
+        timeoutId: timeoutId 
+      });
+
+      try {
+        self.process.stdin.write(message);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        self.pendingRequests.delete(id);
+        reject(error);
+      }
     });
   }
 
