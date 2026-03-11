@@ -62,6 +62,16 @@ const translations = {
     llmProviders: 'Providers', openai: 'OpenAI', anthropic: 'Anthropic', ollama: 'Ollama',
     lmstudio: 'LM Studio', mock: 'Mock (Testing)', llmTestSuccess: 'Connection successful',
     llmTestFailed: 'Connection failed', llmConfigSaved: 'Configuration saved',
+    llmChat: 'AI Chat',
+    llmChatPlaceholder: 'Type a message to chat with AI...',
+    llmChatSend: 'Send',
+    llmChatThinking: 'Thinking...',
+    llmChatError: 'Chat error',
+    llmChatClear: 'Clear',
+    llmChatWelcome: 'Hello! I am MeowTea AI Assistant. How can I help you?',
+    llmChatModel: 'Model',
+    llmChatTokens: 'Tokens',
+    llmChatNewChat: 'New Chat',
   },
   zh: {
     dashboard: '仪表盘', agents: '智能体', tasks: '任务', sessions: '会话',
@@ -119,6 +129,16 @@ const translations = {
     llmProviders: '提供商', openai: 'OpenAI', anthropic: 'Anthropic', ollama: 'Ollama',
     lmstudio: 'LM Studio', mock: 'Mock (测试)', llmTestSuccess: '连接成功',
     llmTestFailed: '连接失败', llmConfigSaved: '配置已保存',
+    llmChat: 'AI 对话',
+    llmChatPlaceholder: '输入消息与 AI 对话...',
+    llmChatSend: '发送',
+    llmChatThinking: '思考中...',
+    llmChatError: '对话错误',
+    llmChatClear: '清空',
+    llmChatWelcome: '你好！我是 MeowTea AI 助手，有什么可以帮助你的？',
+    llmChatModel: '模型',
+    llmChatTokens: 'Token',
+    llmChatNewChat: '新对话',
   }
 };
 
@@ -176,6 +196,23 @@ const styles = {
   toastSuccess: { background: 'rgba(46,213,115,0.9)', color: '#fff' },
   toastError: { background: 'rgba(255,71,87,0.9)', color: '#fff' },
   resultBox: { background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '12px', marginTop: '12px', fontFamily: 'monospace', fontSize: '12px', maxHeight: '200px', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' },
+  chatContainer: { display: 'flex', flexDirection: 'column', height: '500px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', overflow: 'hidden' },
+  chatMessages: { flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  chatMessage: { maxWidth: '85%', padding: '12px 16px', borderRadius: '12px', lineHeight: '1.5', fontSize: '14px' },
+  chatMessageUser: { alignSelf: 'flex-end', background: 'linear-gradient(135deg, #00d9ff 0%, #00b4d8 100%)', color: '#0f0f1a' },
+  chatMessageAI: { alignSelf: 'flex-start', background: 'rgba(255,255,255,0.08)', color: '#e0e0e0', border: '1px solid rgba(255,255,255,0.1)' },
+  chatMessageSystem: { alignSelf: 'center', background: 'rgba(255,165,2,0.15)', color: '#ffa502', fontSize: '12px', padding: '8px 16px' },
+  chatInputArea: { padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '12px', alignItems: 'flex-end' },
+  chatInput: { flex: 1, padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', resize: 'none', minHeight: '44px', maxHeight: '120px' },
+  chatSendBtn: { padding: '12px 20px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #00d9ff 0%, #00b4d8 100%)', color: '#0f0f1a', fontWeight: '600', cursor: 'pointer', fontSize: '14px' },
+  chatHeader: { padding: '12px 16px', background: 'rgba(0,0,0,0.2)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  chatTitle: { fontSize: '14px', fontWeight: '600', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' },
+  chatInfo: { fontSize: '11px', color: '#666', marginTop: '4px' },
+  typingIndicator: { display: 'flex', gap: '4px', padding: '8px 0' },
+  typingDot: { width: '6px', height: '6px', borderRadius: '50%', background: '#00d9ff', animation: 'typing 1s infinite' },
+  chatInputArea: { padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '12px', alignItems: 'flex-end' },
+  chatInput: { flex: 1, padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', resize: 'none', minHeight: '44px', maxHeight: '120px', fontFamily: 'inherit' },
+  chatSendBtn: { padding: '12px 20px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #00d9ff 0%, #00b4d8 100%)', color: '#0f0f1a', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' },
 };
 
 const statusColors = { active: '#2ed573', completed: '#00d9ff', pending: '#ffa502', failed: '#ff4757', idle: '#666', busy: '#ffa502', ready: '#2ed573', registered: '#2ed573', disabled: '#666', open: '#2ed573', closed: '#666' };
@@ -251,6 +288,10 @@ function App() {
   const [toolForm, setToolForm] = useState({ name: '', description: '', category: 'general', handler: 'async (params) => {\n  return params;\n}' });
   const [toolParams, setToolParams] = useState('{}');
   const [toolResult, setToolResult] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatMessagesRef = React.useRef(null);
 
   const t = translations[lang];
   const showToast = (message, type = 'success') => setToast({ message, type });
@@ -302,6 +343,58 @@ function App() {
         fetchData();
       }).catch(e => { setLoading(false); showToast(e.message, 'error'); });
   };
+
+  const handleChatSend = () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const userMessage = chatInput.trim();
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date().toISOString() }]);
+    setChatInput('');
+    setChatLoading(true);
+    
+    fetch(`${API_BASE}/llm/chat`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ agent: 'assistant', message: userMessage }) 
+    })
+      .then(res => res.json())
+      .then(data => {
+        setChatLoading(false);
+        if (data.success && data.data) {
+          const response = data.data;
+          setChatMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: response.content || response.message || JSON.stringify(response),
+            timestamp: new Date().toISOString(),
+            model: response.model,
+            tokens: response.usage
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, { 
+            role: 'system', 
+            content: data.error || t.llmChatError,
+            timestamp: new Date().toISOString()
+          }]);
+        }
+      })
+      .catch(e => {
+        setChatLoading(false);
+        setChatMessages(prev => [...prev, { 
+          role: 'system', 
+          content: e.message,
+          timestamp: new Date().toISOString()
+        }]);
+      });
+  };
+
+  const handleChatClear = () => {
+    setChatMessages([]);
+  };
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   const handleClarification = () => {
     if (!clarification) return;
@@ -449,25 +542,64 @@ function App() {
         <StatCard title={t.totalTasks} value={stats.tasks} icon="📋" />
         <StatCard title={t.completed} value={stats.completedTasks} icon="✅" />
       </div>
+      
       <div style={styles.panel}>
-        <div style={styles.panelHeader}><span style={styles.panelTitle}>{t.quickCommand}</span>
-          {orchestratorStatus.status && <StatusBadge status={orchestratorStatus.status} t={t} />}</div>
-        <div style={styles.panelBody}>
-          {clarification ? (
-            <div>
-              <p style={{ marginBottom: '12px' }}>{t.understanding}: {clarification.understanding}</p>
-              {clarification.questions?.map((q, i) => <p key={i} style={{ marginBottom: '8px' }}>{i + 1}. {q}</p>)}
-              <textarea style={styles.textarea} placeholder={t.enterResponses} value={clarificationInput} onChange={e => setClarificationInput(e.target.value)} />
-              <button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleClarification} disabled={loading}>{loading ? t.submitting : t.submitClarification}</button>
-            </div>
-          ) : (
-            <div>
-              <textarea style={styles.textarea} placeholder={t.enterInstruction} value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && e.ctrlKey && handleSubmit()} />
-              <button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleSubmit} disabled={loading || !userInput.trim()}>{loading ? t.processing : t.execute}</button>
-            </div>
-          )}
+        <div style={styles.chatHeader}>
+          <span style={styles.chatTitle}>💬 {t.llmChat}</span>
+          <button style={{ ...styles.btn, ...styles.btnSecondary, ...styles.btnSmall }} onClick={handleChatClear}>{t.llmChatNewChat}</button>
+        </div>
+        <div style={styles.chatContainer}>
+          <div style={styles.chatMessages} ref={chatMessagesRef}>
+            {chatMessages.length === 0 && (
+              <div style={{ ...styles.chatMessage, ...styles.chatMessageAI }}>
+                {t.llmChatWelcome}
+              </div>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div key={i} style={{
+                ...styles.chatMessage,
+                ...(msg.role === 'user' ? styles.chatMessageUser : 
+                    msg.role === 'system' ? styles.chatMessageSystem : styles.chatMessageAI)
+              }}>
+                <div>{msg.content}</div>
+                {msg.model && (
+                  <div style={styles.chatInfo}>
+                    {t.llmChatModel}: {msg.model} | {t.llmChatTokens}: {msg.tokens?.input_tokens || 0} in / {msg.tokens?.output_tokens || 0} out
+                  </div>
+                )}
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ ...styles.chatMessage, ...styles.chatMessageAI }}>
+                <div style={styles.typingIndicator}>
+                  <span style={styles.typingDot}></span>
+                  <span style={{ ...styles.typingDot, animationDelay: '0.2s' }}></span>
+                  <span style={{ ...styles.typingDot, animationDelay: '0.4s' }}></span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={styles.chatInputArea}>
+            <textarea 
+              style={styles.chatInput}
+              placeholder={t.llmChatPlaceholder}
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleChatSend();
+                }
+              }}
+              rows={1}
+            />
+            <button style={styles.chatSendBtn} onClick={handleChatSend} disabled={chatLoading || !chatInput.trim()}>
+              {chatLoading ? t.llmChatThinking : t.llmChatSend}
+            </button>
+          </div>
         </div>
       </div>
+      
       <div style={styles.panel}>
         <div style={styles.panelHeader}><span style={styles.panelTitle}>{t.activityLog}</span>
           <div style={styles.flex}>
