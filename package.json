@@ -15,10 +15,12 @@
     "watch": "node cli/index.js watch",
     "web": "node web/api/server.js",
     "web:dev": "node web/api/server.js",
+    "start": "node web/api/server.js",
     "dashboard:install": "cd web/dashboard && npm install",
     "dashboard:build": "cd web/dashboard && npm run build",
     "dashboard:start": "cd web/dashboard && npm start",
-    "build": "npm run dashboard:install && npm run dashboard:build"
+    "build": "npm run dashboard:install && npm run dashboard:build",
+    "dev": "npm run build && npm run web"
   },
   "keywords": [
     "multi-agent",
