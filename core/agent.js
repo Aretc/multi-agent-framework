@@ -6,7 +6,7 @@
 
 const { createLLMAdapter } = require('./llm/adapter');
 const { AgentMemory } = require('./memory');
-const { ToolManager } = require('./tools');
+const { ToolManager, BUILTIN_TOOLS } = require('./tools');
 
 const DEFAULT_AGENT_CONFIG = {
   llm: {
@@ -52,9 +52,36 @@ class AgentRuntime {
     // Initialize Tools
     if (this.config.tools.enabled) {
       this.toolManager = new ToolManager();
+      
+      // Register built-in tools
+      if (this.config.tools.builtin) {
+        for (const [name, tool] of Object.entries(BUILTIN_TOOLS)) {
+          try {
+            this.toolManager.registerTool(tool);
+          } catch (e) {
+            // Tool already registered
+          }
+        }
+      }
+      
+      // Register custom tools by name or definition
       if (this.config.tools.custom) {
         this.config.tools.custom.forEach(function(tool) {
-          this.toolManager.registerTool(tool);
+          if (typeof tool === 'string' && BUILTIN_TOOLS[tool]) {
+            // Tool is a name reference to built-in tool
+            try {
+              this.toolManager.registerTool(BUILTIN_TOOLS[tool]);
+            } catch (e) {
+              // Tool already registered
+            }
+          } else if (typeof tool === 'object' && tool.name) {
+            // Tool is a definition object
+            try {
+              this.toolManager.registerTool(tool);
+            } catch (e) {
+              // Tool already registered
+            }
+          }
         }.bind(this));
       }
     }

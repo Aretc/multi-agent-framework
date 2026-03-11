@@ -120,6 +120,10 @@ class ToolRegistry extends EventEmitter {
     return tool;
   }
 
+  registerTool(definition) {
+    return this.register(definition);
+  }
+
   unregister(name) {
     const tool = this.tools.get(name);
     if (!tool) {
@@ -597,6 +601,7 @@ BUILTIN_TOOLS.shell_exec = {
 module.exports = {
   ToolDefinition,
   ToolRegistry,
+  ToolManager: ToolRegistry,
   BUILTIN_TOOLS,
   TOOL_STATUS
 };
