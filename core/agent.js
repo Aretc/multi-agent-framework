@@ -1,12 +1,18 @@
 /**
- * Agent Runtime
+ * Enhanced Agent Runtime
  * 
- * Combines LLM, Memory, and Tools to create intelligent agents
+ * Features:
+ * - ReAct Loop (Reasoning + Acting)
+ * - Chain-of-Thought (CoT) Reasoning
+ * - Multi-turn Conversation Management
+ * - Context Compression
+ * - Streaming Support
  */
 
 const { createLLMAdapter } = require('./llm/adapter');
 const { AgentMemory } = require('./memory');
 const { ToolManager, BUILTIN_TOOLS } = require('./tools');
+const { EventEmitter } = require('events');
 
 const DEFAULT_AGENT_CONFIG = {
   llm: {
@@ -25,12 +31,26 @@ const DEFAULT_AGENT_CONFIG = {
   },
   behavior: {
     maxIterations: 10,
-    timeout: 60000
+    timeout: 60000,
+    enableCoT: true,
+    enableCompression: true,
+    compressionThreshold: 4000
   }
 };
 
-class AgentRuntime {
+const AGENT_STATES = {
+  IDLE: 'idle',
+  THINKING: 'thinking',
+  ACTING: 'acting',
+  OBSERVING: 'observing',
+  STREAMING: 'streaming',
+  COMPLETED: 'completed',
+  ERROR: 'error'
+};
+
+class AgentRuntime extends EventEmitter {
   constructor(config) {
+    super();
     config = config || {};
     this.config = { ...DEFAULT_AGENT_CONFIG, ...config };
     
@@ -38,10 +58,8 @@ class AgentRuntime {
     this.role = config.role || 'assistant';
     this.description = config.description || '';
     
-    // Initialize LLM
     this.llm = createLLMAdapter(this.config.llm);
     
-    // Initialize Memory
     if (this.config.memory.enabled) {
       this.memory = new AgentMemory(this.name, {
         rootPath: this.config.memory.rootPath || './.maf/memory',
@@ -49,47 +67,37 @@ class AgentRuntime {
       });
     }
     
-    // Initialize Tools
     if (this.config.tools.enabled) {
       this.toolManager = new ToolManager();
       
-      // Register built-in tools
       if (this.config.tools.builtin) {
         for (const [name, tool] of Object.entries(BUILTIN_TOOLS)) {
           try {
             this.toolManager.registerTool(tool);
-          } catch (e) {
-            // Tool already registered
-          }
+          } catch (e) {}
         }
       }
       
-      // Register custom tools by name or definition
       if (this.config.tools.custom) {
         this.config.tools.custom.forEach(function(tool) {
           if (typeof tool === 'string' && BUILTIN_TOOLS[tool]) {
-            // Tool is a name reference to built-in tool
             try {
               this.toolManager.registerTool(BUILTIN_TOOLS[tool]);
-            } catch (e) {
-              // Tool already registered
-            }
+            } catch (e) {}
           } else if (typeof tool === 'object' && tool.name) {
-            // Tool is a definition object
             try {
               this.toolManager.registerTool(tool);
-            } catch (e) {
-              // Tool already registered
-            }
+            } catch (e) {}
           }
         }.bind(this));
       }
     }
     
-    // State
-    this.state = 'idle';
+    this.state = AGENT_STATES.IDLE;
     this.currentTask = null;
     this.history = [];
+    this.conversationHistory = [];
+    this.thoughtChain = [];
   }
 
   async init() {
@@ -100,45 +108,101 @@ class AgentRuntime {
   }
 
   async think(context) {
-    this.state = 'thinking';
+    this.state = AGENT_STATES.THINKING;
+    this.emit('stateChange', { state: AGENT_STATES.THINKING, context: context });
     
     const messages = this.buildMessages(context);
     
     try {
       const response = await this.llm.chat(messages);
       
-      // Record thinking event
       if (this.memory) {
         await this.memory.recordEvent({
           type: 'thinking',
           action: 'LLM inference',
-          details: { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens }
+          details: { 
+            inputTokens: response.usage?.input_tokens, 
+            outputTokens: response.usage?.output_tokens 
+          }
         });
       }
       
-      return this.parseResponse(response);
+      const thought = this.parseResponse(response);
+      
+      if (this.config.behavior.enableCoT && thought.reasoning) {
+        this.thoughtChain.push({
+          step: this.thoughtChain.length + 1,
+          reasoning: thought.reasoning,
+          conclusion: thought.conclusion || thought.content,
+          timestamp: Date.now()
+        });
+      }
+      
+      this.emit('thought', { thought: thought, context: context });
+      return thought;
     } catch (e) {
-      this.state = 'error';
+      this.state = AGENT_STATES.ERROR;
+      this.emit('error', { error: e, phase: 'think' });
+      throw e;
+    }
+  }
+
+  async thinkStream(context, onChunk) {
+    this.state = AGENT_STATES.STREAMING;
+    this.emit('stateChange', { state: AGENT_STATES.STREAMING, context: context });
+    
+    const messages = this.buildMessages(context);
+    let fullContent = '';
+    
+    try {
+      const response = await this.llm.stream(messages, function(chunk, accumulated) {
+        fullContent = accumulated;
+        if (onChunk) onChunk(chunk, accumulated);
+        this.emit('chunk', { chunk: chunk, accumulated: accumulated });
+      }.bind(this));
+      
+      const thought = this.parseResponse(response);
+      
+      if (this.config.behavior.enableCoT && thought.reasoning) {
+        this.thoughtChain.push({
+          step: this.thoughtChain.length + 1,
+          reasoning: thought.reasoning,
+          conclusion: thought.conclusion || thought.content,
+          timestamp: Date.now()
+        });
+      }
+      
+      this.emit('thought', { thought: thought, context: context });
+      return thought;
+    } catch (e) {
+      this.state = AGENT_STATES.ERROR;
+      this.emit('error', { error: e, phase: 'thinkStream' });
       throw e;
     }
   }
 
   async act(decision) {
-    this.state = 'acting';
+    this.state = AGENT_STATES.ACTING;
+    this.emit('stateChange', { state: AGENT_STATES.ACTING, decision: decision });
     
     if (decision.toolCall) {
-      return await this.executeTool(decision.toolCall.name, decision.toolCall.params);
+      const result = await this.executeTool(decision.toolCall.name, decision.toolCall.params);
+      this.emit('action', { type: 'tool', name: decision.toolCall.name, result: result });
+      return result;
     }
     
     if (decision.action) {
-      return await this.executeAction(decision.action);
+      const result = await this.executeAction(decision.action);
+      this.emit('action', { type: 'action', action: decision.action, result: result });
+      return result;
     }
     
     return { type: 'message', content: decision.content };
   }
 
   async observe(result) {
-    this.state = 'observing';
+    this.state = AGENT_STATES.OBSERVING;
+    this.emit('stateChange', { state: AGENT_STATES.OBSERVING, result: result });
     
     if (this.memory) {
       await this.memory.recordEvent({
@@ -148,13 +212,16 @@ class AgentRuntime {
       });
     }
     
+    this.emit('observation', { result: result });
     return result;
   }
 
   async run(input, context) {
     context = context || {};
-    this.state = 'running';
+    this.state = AGENT_STATES.IDLE;
     this.currentTask = input;
+    this.history = [];
+    this.thoughtChain = [];
     
     const maxIterations = this.config.behavior.maxIterations;
     let iteration = 0;
@@ -162,60 +229,129 @@ class AgentRuntime {
     let done = false;
     let finalResult = null;
 
+    this.emit('runStart', { input: input, context: context });
+
     while (!done && iteration < maxIterations) {
       iteration++;
       
-      // Think
+      this.emit('iterationStart', { iteration: iteration, maxIterations: maxIterations });
+      
       const thought = await this.think(currentContext);
       this.history.push({ type: 'thought', data: thought, iteration: iteration });
       
-      // Check if done
       if (thought.done || thought.type === 'final') {
         done = true;
         finalResult = thought;
         break;
       }
       
-      // Act
       const actionResult = await this.act(thought);
       this.history.push({ type: 'action', data: actionResult, iteration: iteration });
       
-      // Observe
       const observation = await this.observe(actionResult);
       this.history.push({ type: 'observation', data: observation, iteration: iteration });
       
-      // Update context
       currentContext.lastThought = thought;
       currentContext.lastAction = actionResult;
       currentContext.lastObservation = observation;
+      currentContext.iteration = iteration;
       
-      // Check for completion
       if (observation.type === 'final' || observation.done) {
         done = true;
         finalResult = observation;
       }
+      
+      if (this.config.behavior.enableCompression) {
+        currentContext = await this.compressContext(currentContext);
+      }
+      
+      this.emit('iterationEnd', { iteration: iteration, result: observation });
     }
     
-    this.state = 'completed';
+    this.state = AGENT_STATES.COMPLETED;
     this.currentTask = null;
     
-    return {
+    const runResult = {
       result: finalResult,
       iterations: iteration,
-      history: this.history.slice(-iteration * 3)
+      history: this.history.slice(-iteration * 3),
+      thoughtChain: this.thoughtChain
     };
+    
+    this.emit('runEnd', runResult);
+    return runResult;
+  }
+
+  async runStream(input, context, onChunk) {
+    context = context || {};
+    this.state = AGENT_STATES.IDLE;
+    this.currentTask = input;
+    this.history = [];
+    this.thoughtChain = [];
+    
+    const maxIterations = this.config.behavior.maxIterations;
+    let iteration = 0;
+    let currentContext = { ...context, input: input };
+    let done = false;
+    let finalResult = null;
+
+    this.emit('runStart', { input: input, context: context });
+
+    while (!done && iteration < maxIterations) {
+      iteration++;
+      
+      this.emit('iterationStart', { iteration: iteration, maxIterations: maxIterations });
+      
+      const thought = await this.thinkStream(currentContext, onChunk);
+      this.history.push({ type: 'thought', data: thought, iteration: iteration });
+      
+      if (thought.done || thought.type === 'final') {
+        done = true;
+        finalResult = thought;
+        break;
+      }
+      
+      const actionResult = await this.act(thought);
+      this.history.push({ type: 'action', data: actionResult, iteration: iteration });
+      
+      const observation = await this.observe(actionResult);
+      this.history.push({ type: 'observation', data: observation, iteration: iteration });
+      
+      currentContext.lastThought = thought;
+      currentContext.lastAction = actionResult;
+      currentContext.lastObservation = observation;
+      currentContext.iteration = iteration;
+      
+      if (observation.type === 'final' || observation.done) {
+        done = true;
+        finalResult = observation;
+      }
+      
+      this.emit('iterationEnd', { iteration: iteration, result: observation });
+    }
+    
+    this.state = AGENT_STATES.COMPLETED;
+    this.currentTask = null;
+    
+    const runResult = {
+      result: finalResult,
+      iterations: iteration,
+      history: this.history.slice(-iteration * 3),
+      thoughtChain: this.thoughtChain
+    };
+    
+    this.emit('runEnd', runResult);
+    return runResult;
   }
 
   buildMessages(context) {
     const messages = [];
     
-    // System message
     messages.push({
       role: 'system',
       content: this.buildSystemPrompt(context)
     });
     
-    // Memory context
     if (this.memory) {
       const recentMemory = this.memory.recall(10);
       recentMemory.forEach(function(item) {
@@ -226,7 +362,16 @@ class AgentRuntime {
       });
     }
     
-    // Current input
+    if (this.thoughtChain.length > 0 && this.config.behavior.enableCoT) {
+      const cotPrompt = this.buildCoTPrompt();
+      if (cotPrompt) {
+        messages.push({
+          role: 'assistant',
+          content: '[Previous Reasoning]\n' + cotPrompt
+        });
+      }
+    }
+    
     if (context.input) {
       messages.push({
         role: 'user',
@@ -234,12 +379,22 @@ class AgentRuntime {
       });
     }
     
-    // Conversation history
+    if (context.lastObservation) {
+      messages.push({
+        role: 'user',
+        content: '[Observation] ' + JSON.stringify(context.lastObservation).substring(0, 500)
+      });
+    }
+    
     if (context.history) {
       context.history.forEach(function(msg) {
         messages.push(msg);
       });
     }
+    
+    this.conversationHistory.forEach(function(msg) {
+      messages.push(msg);
+    });
     
     return messages;
   }
@@ -249,19 +404,32 @@ class AgentRuntime {
     if (this.role) prompt += ', a ' + this.role;
     if (this.description) prompt += '. ' + this.description;
     
-    // Add available tools
+    if (this.config.behavior.enableCoT) {
+      prompt += '\n\nUse Chain-of-Thought reasoning. Format your response as:\n';
+      prompt += '```json\n{"reasoning": "Step-by-step reasoning...", "conclusion": "Your conclusion", "action": {...} or "toolCall": {...} or "content": "..."}\n```';
+    }
+    
     if (this.toolManager) {
       const tools = this.toolManager.listTools();
       if (tools.length > 0) {
         prompt += '\n\nAvailable tools:\n';
         tools.forEach(function(tool) {
           prompt += '- ' + tool.name + ': ' + tool.description + '\n';
+          if (tool.parameters) {
+            prompt += '  Parameters: ' + JSON.stringify(tool.parameters) + '\n';
+          }
         });
-        prompt += '\nTo use a tool, respond with: {"toolCall": {"name": "tool_name", "params": {...}}}';
+        prompt += '\nTo use a tool: {"toolCall": {"name": "tool_name", "params": {...}}}';
       }
     }
     
-    // Add context
+    prompt += '\n\nAvailable actions:\n';
+    prompt += '- remember: Store in short-term memory\n';
+    prompt += '- memorize: Store in long-term memory\n';
+    prompt += '- recall: Retrieve from memory\n';
+    prompt += '- respond: Provide final response\n';
+    prompt += '\nTo use an action: {"action": {"type": "action_name", ...params}}';
+    
     if (context.systemPrompt) {
       prompt += '\n\n' + context.systemPrompt;
     }
@@ -269,36 +437,59 @@ class AgentRuntime {
     return prompt;
   }
 
+  buildCoTPrompt() {
+    if (this.thoughtChain.length === 0) return '';
+    
+    return this.thoughtChain.slice(-3).map(function(t) {
+      return 'Step ' + t.step + ': ' + t.reasoning + ' => ' + t.conclusion;
+    }).join('\n');
+  }
+
   parseResponse(response) {
     const content = response.content || '';
     
-    // Try to parse as JSON (tool call)
     try {
       const parsed = JSON.parse(content);
+      
       if (parsed.toolCall) {
         return {
           type: 'tool_call',
           toolCall: parsed.toolCall,
+          reasoning: parsed.reasoning,
           content: content
         };
       }
+      
       if (parsed.action) {
         return {
           type: 'action',
           action: parsed.action,
+          reasoning: parsed.reasoning,
+          conclusion: parsed.conclusion,
           content: content
         };
       }
-      if (parsed.done) {
+      
+      if (parsed.done || parsed.type === 'final') {
         return {
           type: 'final',
-          content: parsed.content || parsed.result || content,
+          content: parsed.content || parsed.result || parsed.conclusion || content,
+          reasoning: parsed.reasoning,
           done: true
         };
       }
-    } catch (e) {
-      // Not JSON, treat as text response
-    }
+      
+      if (parsed.reasoning) {
+        return {
+          type: 'reasoning',
+          reasoning: parsed.reasoning,
+          conclusion: parsed.conclusion,
+          action: parsed.action,
+          toolCall: parsed.toolCall,
+          content: content
+        };
+      }
+    } catch (e) {}
     
     return {
       type: 'text',
@@ -359,6 +550,67 @@ class AgentRuntime {
     }
   }
 
+  async compressContext(context) {
+    const threshold = this.config.behavior.compressionThreshold;
+    
+    const contextStr = JSON.stringify(context);
+    if (contextStr.length < threshold) {
+      return context;
+    }
+    
+    const compressed = {
+      input: context.input,
+      iteration: context.iteration,
+      summary: await this.summarizeHistory()
+    };
+    
+    if (context.lastObservation) {
+      compressed.lastObservationSummary = {
+        type: context.lastObservation.type,
+        preview: JSON.stringify(context.lastObservation).substring(0, 200)
+      };
+    }
+    
+    this.emit('contextCompressed', { 
+      originalSize: contextStr.length, 
+      compressedSize: JSON.stringify(compressed).length 
+    });
+    
+    return compressed;
+  }
+
+  async summarizeHistory() {
+    if (this.history.length === 0) return '';
+    
+    const recentHistory = this.history.slice(-6);
+    const summary = recentHistory.map(function(h) {
+      if (h.type === 'thought') {
+        return 'Thought: ' + (h.data.reasoning || h.data.content || '').substring(0, 100);
+      }
+      if (h.type === 'action') {
+        return 'Action: ' + (h.data.type || JSON.stringify(h.data)).substring(0, 100);
+      }
+      if (h.type === 'observation') {
+        return 'Observation: ' + JSON.stringify(h.data.result || h.data).substring(0, 100);
+      }
+      return '';
+    }).join('\n');
+    
+    return summary;
+  }
+
+  addToConversation(role, content) {
+    this.conversationHistory.push({ role: role, content: content });
+    
+    if (this.conversationHistory.length > 20) {
+      this.conversationHistory = this.conversationHistory.slice(-20);
+    }
+  }
+
+  clearConversation() {
+    this.conversationHistory = [];
+  }
+
   async remember(content, metadata) {
     if (!this.memory) return null;
     await this.memory.init();
@@ -387,18 +639,33 @@ class AgentRuntime {
       state: this.state,
       currentTask: this.currentTask,
       historyLength: this.history.length,
+      conversationLength: this.conversationHistory.length,
+      thoughtChainLength: this.thoughtChain.length,
       memoryStats: this.memory ? this.memory.getStats() : null
     };
   }
 
+  getThoughtChain() {
+    return this.thoughtChain.slice();
+  }
+
+  getHistory() {
+    return this.history.slice();
+  }
+
   reset() {
-    this.state = 'idle';
+    this.state = AGENT_STATES.IDLE;
     this.currentTask = null;
     this.history = [];
+    this.thoughtChain = [];
+  }
+
+  resetAll() {
+    this.reset();
+    this.conversationHistory = [];
   }
 }
 
-// Agent Factory
 function createAgent(config) {
   const runtime = new AgentRuntime(config);
   return runtime;
@@ -407,5 +674,6 @@ function createAgent(config) {
 module.exports = {
   AgentRuntime,
   createAgent,
-  DEFAULT_AGENT_CONFIG
+  DEFAULT_AGENT_CONFIG,
+  AGENT_STATES
 };
