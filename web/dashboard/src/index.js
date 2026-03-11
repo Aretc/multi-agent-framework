@@ -47,6 +47,12 @@ const translations = {
     description: 'Description', config: 'Configuration', run: 'Run', test: 'Test',
     success: 'Success', operationSuccess: 'Operation successful', operationFailed: 'Operation failed',
     confirmDelete: 'Are you sure you want to delete?', yes: 'Yes', no: 'No',
+    addTask: 'Add Task', taskTitle: 'Task Title', taskPriority: 'Priority', high: 'High', medium: 'Medium', low: 'Low',
+    assignAgent: 'Assign Agent', taskCancelled: 'Task cancelled', taskDeleted: 'Task deleted',
+    addSession: 'Add Session', sessionName: 'Session Name', sessionClosed: 'Session closed',
+    sessionDeleted: 'Session deleted', closeSession: 'Close', openSession: 'Open',
+    viewDetails: 'View', result: 'Result', toolResult: 'Tool Result',
+    assign: 'Assign', unassign: 'Unassign',
   },
   zh: {
     dashboard: '仪表盘', agents: '智能体', tasks: '任务', sessions: '会话',
@@ -89,6 +95,12 @@ const translations = {
     description: '描述', config: '配置', run: '运行', test: '测试',
     success: '成功', operationSuccess: '操作成功', operationFailed: '操作失败',
     confirmDelete: '确定要删除吗？', yes: '是', no: '否',
+    addTask: '添加任务', taskTitle: '任务标题', taskPriority: '优先级', high: '高', medium: '中', low: '低',
+    assignAgent: '分配智能体', taskCancelled: '任务已取消', taskDeleted: '任务已删除',
+    addSession: '添加会话', sessionName: '会话名称', sessionClosed: '会话已关闭',
+    sessionDeleted: '会话已删除', closeSession: '关闭', openSession: '打开',
+    viewDetails: '查看', result: '结果', toolResult: '工具结果',
+    assign: '分配', unassign: '取消分配',
   }
 };
 
@@ -118,6 +130,7 @@ const styles = {
   btnSecondary: { background: 'rgba(255,255,255,0.08)', color: '#fff' },
   btnDanger: { background: 'rgba(255,71,87,0.2)', color: '#ff4757' },
   btnSuccess: { background: 'rgba(46,213,115,0.2)', color: '#2ed573' },
+  btnWarning: { background: 'rgba(255,165,2,0.2)', color: '#ffa502' },
   btnSmall: { padding: '5px 10px', fontSize: '11px' },
   input: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', marginBottom: '12px', transition: 'all 0.2s' },
   textarea: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', minHeight: '100px', resize: 'vertical', marginBottom: '12px' },
@@ -144,9 +157,10 @@ const styles = {
   toast: { position: 'fixed', bottom: '24px', right: '24px', padding: '12px 20px', borderRadius: '10px', fontSize: '13px', fontWeight: '500', zIndex: 2000, animation: 'slideIn 0.3s ease' },
   toastSuccess: { background: 'rgba(46,213,115,0.9)', color: '#fff' },
   toastError: { background: 'rgba(255,71,87,0.9)', color: '#fff' },
+  resultBox: { background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '12px', marginTop: '12px', fontFamily: 'monospace', fontSize: '12px', maxHeight: '200px', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' },
 };
 
-const statusColors = { active: '#2ed573', completed: '#00d9ff', pending: '#ffa502', failed: '#ff4757', idle: '#666', busy: '#ffa502', ready: '#2ed573', registered: '#2ed573', disabled: '#666' };
+const statusColors = { active: '#2ed573', completed: '#00d9ff', pending: '#ffa502', failed: '#ff4757', idle: '#666', busy: '#ffa502', ready: '#2ed573', registered: '#2ed573', disabled: '#666', open: '#2ed573', closed: '#666' };
 const logTypeColors = { info: { bg: 'rgba(0,217,255,0.15)', color: '#00d9ff' }, warning: { bg: 'rgba(255,165,2,0.15)', color: '#ffa502' }, error: { bg: 'rgba(255,71,87,0.15)', color: '#ff4757' } };
 
 function StatusBadge({ status, t }) {
@@ -201,6 +215,10 @@ function App() {
   const [showAddRule, setShowAddRule] = useState(false);
   const [showAddMCP, setShowAddMCP] = useState(false);
   const [showToolExec, setShowToolExec] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddSession, setShowAddSession] = useState(false);
+  const [showTaskDetails, setShowTaskDetails] = useState(null);
+  const [showToolResult, setShowToolResult] = useState(null);
   const [selectedTool, setSelectedTool] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   
@@ -208,7 +226,10 @@ function App() {
   const [skillForm, setSkillForm] = useState({ name: '', template: 'basic' });
   const [ruleForm, setRuleForm] = useState({ name: '', type: 'validation', priority: 50, description: '', condition: '' });
   const [mcpForm, setMcpForm] = useState({ name: '', command: '', args: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'medium', assignedAgentId: '' });
+  const [sessionForm, setSessionForm] = useState({ name: '' });
   const [toolParams, setToolParams] = useState('{}');
+  const [toolResult, setToolResult] = useState(null);
 
   const t = translations[lang];
   const showToast = (message, type = 'success') => setToast({ message, type });
@@ -284,6 +305,53 @@ function App() {
       .then(() => { setConfirmDelete(null); showToast(t.agentRemoved); fetchData(); });
   };
 
+  const handleAddTask = () => {
+    if (!taskForm.title) return;
+    fetch(`${API_BASE}/tasks/orchestrator`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskForm) })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) { setShowAddTask(false); setTaskForm({ title: '', description: '', priority: 'medium', assignedAgentId: '' }); showToast(t.taskCreated); fetchData(); }
+        else showToast(data.error || t.operationFailed, 'error');
+      }).catch(e => showToast(e.message, 'error'));
+  };
+
+  const handleCancelTask = (id) => {
+    fetch(`${API_BASE}/tasks/orchestrator/${id}/cancel`, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) { showToast(t.taskCancelled); fetchData(); }
+        else showToast(data.error || t.operationFailed, 'error');
+      }).catch(e => showToast(e.message, 'error'));
+  };
+
+  const handleDeleteTask = (id) => {
+    fetch(`${API_BASE}/tasks/orchestrator/${id}`, { method: 'DELETE' })
+      .then(() => { setConfirmDelete(null); showToast(t.taskDeleted); fetchData(); });
+  };
+
+  const handleAddSession = () => {
+    fetch(`${API_BASE}/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sessionForm) })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) { setShowAddSession(false); setSessionForm({ name: '' }); showToast(t.success); fetchData(); }
+        else showToast(data.error || t.operationFailed, 'error');
+      }).catch(e => showToast(e.message, 'error'));
+  };
+
+  const handleCloseSession = (id) => {
+    fetch(`${API_BASE}/sessions/${id}/close`, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) { showToast(t.sessionClosed); fetchData(); }
+        else showToast(data.error || t.operationFailed, 'error');
+      }).catch(e => showToast(e.message, 'error'));
+  };
+
+  const handleDeleteSession = (id) => {
+    fetch(`${API_BASE}/sessions/${id}`, { method: 'DELETE' })
+      .then(() => { setConfirmDelete(null); showToast(t.sessionDeleted); fetchData(); });
+  };
+
   const handleAddSkill = () => {
     if (!skillForm.name) return;
     fetch(`${API_BASE}/skills/install`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: skillForm.name, template: skillForm.template }) })
@@ -321,7 +389,11 @@ function App() {
     fetch(`${API_BASE}/tools/${selectedTool.name}/execute`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ params }) })
       .then(res => res.json())
       .then(data => {
-        if (data.success) { setShowToolExec(false); setSelectedTool(null); setToolParams('{}'); showToast(t.executeTool); fetchData(); }
+        if (data.success) { 
+          setToolResult(data.data); 
+          setShowToolResult(true);
+          fetchData(); 
+        }
         else showToast(data.error || t.operationFailed, 'error');
       }).catch(e => showToast(e.message, 'error'));
   };
@@ -406,11 +478,14 @@ function App() {
 
   const renderTasks = () => (
     <div style={styles.panel}>
-      <div style={styles.panelHeader}><span style={styles.panelTitle}>{t.tasksPanel} ({tasks.length})</span></div>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.tasksPanel} ({tasks.length})</span>
+        <button style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSmall }} onClick={() => setShowAddTask(true)}>+ {t.addTask}</button>
+      </div>
       <div style={styles.panelBody}>
         {tasks.length === 0 ? <div style={styles.empty}>{t.noTasks}</div> : (
           <table style={styles.table}>
-            <thead><tr><th style={styles.th}>{t.id}</th><th style={styles.th}>{t.title}</th><th style={styles.th}>{t.status}</th><th style={styles.th}>{t.agent}</th><th style={styles.th}>{t.priority}</th></tr></thead>
+            <thead><tr><th style={styles.th}>{t.id}</th><th style={styles.th}>{t.title}</th><th style={styles.th}>{t.status}</th><th style={styles.th}>{t.agent}</th><th style={styles.th}>{t.priority}</th><th style={styles.th}>{t.actions}</th></tr></thead>
             <tbody>{tasks.map(task => (
               <tr key={task.id}>
                 <td style={styles.td}><code style={{ fontSize: '11px' }}>{task.id?.substring(0, 8)}</code></td>
@@ -418,6 +493,13 @@ function App() {
                 <td style={styles.td}><StatusBadge status={task.status} t={t} /></td>
                 <td style={styles.td}>{task.assignedAgentName || '-'}</td>
                 <td style={styles.td}>{task.priority || 'medium'}</td>
+                <td style={styles.td}>
+                  <div style={styles.flex}>
+                    <button style={{ ...styles.btn, ...styles.btnSecondary, ...styles.btnSmall }} onClick={() => setShowTaskDetails(task)}>{t.viewDetails}</button>
+                    {task.status === 'pending' && <button style={{ ...styles.btn, ...styles.btnWarning, ...styles.btnSmall }} onClick={() => handleCancelTask(task.id)}>{t.cancel}</button>}
+                    <button style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall }} onClick={() => setConfirmDelete({ type: 'task', id: task.id })}>{t.remove}</button>
+                  </div>
+                </td>
               </tr>
             ))}</tbody>
           </table>
@@ -428,13 +510,26 @@ function App() {
 
   const renderSessions = () => (
     <div style={styles.panel}>
-      <div style={styles.panelHeader}><span style={styles.panelTitle}>{t.sessionsPanel} ({sessions.length})</span></div>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.sessionsPanel} ({sessions.length})</span>
+        <button style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSmall }} onClick={() => setShowAddSession(true)}>+ {t.addSession}</button>
+      </div>
       <div style={styles.panelBody}>
         {sessions.length === 0 ? <div style={styles.empty}>{t.noSessions}</div> : (
           <table style={styles.table}>
-            <thead><tr><th style={styles.th}>{t.id}</th><th style={styles.th}>{t.status}</th><th style={styles.th}>{t.created}</th></tr></thead>
+            <thead><tr><th style={styles.th}>{t.id}</th><th style={styles.th}>{t.status}</th><th style={styles.th}>{t.created}</th><th style={styles.th}>{t.actions}</th></tr></thead>
             <tbody>{sessions.map(s => (
-              <tr key={s.id}><td style={styles.td}><code style={{ fontSize: '11px' }}>{s.id?.substring(0, 20)}...</code></td><td style={styles.td}><StatusBadge status={s.status} t={t} /></td><td style={styles.td}>{new Date(s.createdAt).toLocaleString()}</td></tr>
+              <tr key={s.id}>
+                <td style={styles.td}><code style={{ fontSize: '11px' }}>{s.id?.substring(0, 20)}...</code></td>
+                <td style={styles.td}><StatusBadge status={s.status} t={t} /></td>
+                <td style={styles.td}>{new Date(s.createdAt).toLocaleString()}</td>
+                <td style={styles.td}>
+                  <div style={styles.flex}>
+                    {s.status === 'active' && <button style={{ ...styles.btn, ...styles.btnWarning, ...styles.btnSmall }} onClick={() => handleCloseSession(s.id)}>{t.closeSession}</button>}
+                    <button style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall }} onClick={() => setConfirmDelete({ type: 'session', id: s.id })}>{t.remove}</button>
+                  </div>
+                </td>
+              </tr>
             ))}</tbody>
           </table>
         )}
@@ -457,7 +552,7 @@ function App() {
                 <td style={styles.td}>{tool.useCount || 0}</td>
                 <td style={styles.td}>
                   <div style={styles.flex}>
-                    <button style={{ ...styles.btn, ...styles.btnSuccess, ...styles.btnSmall }} onClick={() => { setSelectedTool(tool); setToolParams('{}'); setShowToolExec(true); }}>{t.run}</button>
+                    <button style={{ ...styles.btn, ...styles.btnSuccess, ...styles.btnSmall }} onClick={() => { setSelectedTool(tool); setToolParams('{}'); setToolResult(null); setShowToolExec(true); }}>{t.run}</button>
                     {tool.status === 'disabled' ? <button style={{ ...styles.btn, ...styles.btnSecondary, ...styles.btnSmall }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/enable`, { method: 'POST' }).then(fetchData)}>{t.enable}</button> : <button style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/disable`, { method: 'POST' }).then(fetchData)}>{t.disable}</button>}
                   </div>
                 </td>
@@ -578,6 +673,40 @@ function App() {
         <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddAgent(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddAgent}>{t.create}</button></div>
       </Modal>
 
+      <Modal isOpen={showAddTask} onClose={() => setShowAddTask(false)} title={t.addTask}>
+        <div style={styles.formGroup}><label style={styles.label}>{t.taskTitle}</label><input style={styles.input} value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Task title" /></div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.description}</label><textarea style={styles.textarea} value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} /></div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.taskPriority}</label>
+          <select style={styles.select} value={taskForm.priority} onChange={e => setTaskForm({ ...taskForm, priority: e.target.value })}>
+            <option value="high">{t.high}</option><option value="medium">{t.medium}</option><option value="low">{t.low}</option>
+          </select>
+        </div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.assignAgent}</label>
+          <select style={styles.select} value={taskForm.assignedAgentId} onChange={e => setTaskForm({ ...taskForm, assignedAgentId: e.target.value })}>
+            <option value="">{t.unassign}</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name || a.id}</option>)}
+          </select>
+        </div>
+        <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddTask(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddTask}>{t.create}</button></div>
+      </Modal>
+
+      <Modal isOpen={showTaskDetails !== null} onClose={() => setShowTaskDetails(null)} title={`${t.tasksPanel}: ${showTaskDetails?.title}`}>
+        {showTaskDetails && (
+          <div>
+            <div style={styles.formGroup}><label style={styles.label}>{t.id}</label><div style={{ color: '#00d9ff' }}>{showTaskDetails.id}</div></div>
+            <div style={styles.formGroup}><label style={styles.label}>{t.status}</label><StatusBadge status={showTaskDetails.status} t={t} /></div>
+            <div style={styles.formGroup}><label style={styles.label}>{t.priority}</label><div>{showTaskDetails.priority || 'medium'}</div></div>
+            <div style={styles.formGroup}><label style={styles.label}>{t.agent}</label><div>{showTaskDetails.assignedAgentName || '-'}</div></div>
+            {showTaskDetails.result && <div style={styles.formGroup}><label style={styles.label}>{t.result}</label><div style={styles.resultBox}>{JSON.stringify(showTaskDetails.result, null, 2)}</div></div>}
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={showAddSession} onClose={() => setShowAddSession(false)} title={t.addSession}>
+        <div style={styles.formGroup}><label style={styles.label}>{t.sessionName}</label><input style={styles.input} value={sessionForm.name} onChange={e => setSessionForm({ ...sessionForm, name: e.target.value })} placeholder="session-name" /></div>
+        <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddSession(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddSession}>{t.create}</button></div>
+      </Modal>
+
       <Modal isOpen={showAddSkill} onClose={() => setShowAddSkill(false)} title={t.installSkill}>
         <div style={styles.formGroup}><label style={styles.label}>{t.name}</label><input style={styles.input} value={skillForm.name} onChange={e => setSkillForm({ ...skillForm, name: e.target.value })} placeholder="my-skill" /></div>
         <div style={styles.formGroup}><label style={styles.label}>{t.skillTemplates}</label>
@@ -608,16 +737,29 @@ function App() {
         <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddMCP(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddMCP}>{t.add}</button></div>
       </Modal>
 
-      <Modal isOpen={showToolExec} onClose={() => setShowToolExec(false)} title={`${t.executeTool}: ${selectedTool?.name}`}>
+      <Modal isOpen={showToolExec} onClose={() => { setShowToolExec(false); setToolResult(null); }} title={`${t.executeTool}: ${selectedTool?.name}`}>
         <div style={styles.formGroup}><label style={styles.label}>{t.toolParams}</label><textarea style={{ ...styles.textarea, minHeight: '150px', fontFamily: 'monospace' }} value={toolParams} onChange={e => setToolParams(e.target.value)} /></div>
-        <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowToolExec(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleExecuteTool}>{t.run}</button></div>
+        {toolResult && (
+          <div style={styles.formGroup}>
+            <label style={styles.label}>{t.toolResult}</label>
+            <div style={styles.resultBox}>{typeof toolResult === 'object' ? JSON.stringify(toolResult, null, 2) : String(toolResult)}</div>
+          </div>
+        )}
+        <div style={styles.modalFooter}>
+          <button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => { setShowToolExec(false); setToolResult(null); }}>{t.close}</button>
+          <button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleExecuteTool}>{t.run}</button>
+        </div>
       </Modal>
 
       <Modal isOpen={!!confirmDelete} onClose={() => setConfirmDelete(null)} title={t.confirmDelete}>
         <p style={{ marginBottom: '20px' }}>{t.confirmDelete}</p>
         <div style={styles.modalFooter}>
           <button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setConfirmDelete(null)}>{t.no}</button>
-          <button style={{ ...styles.btn, ...styles.btnDanger }} onClick={() => { if (confirmDelete.type === 'agent') handleRemoveAgent(confirmDelete.id); }}>{t.yes}</button>
+          <button style={{ ...styles.btn, ...styles.btnDanger }} onClick={() => {
+            if (confirmDelete.type === 'agent') handleRemoveAgent(confirmDelete.id);
+            else if (confirmDelete.type === 'task') handleDeleteTask(confirmDelete.id);
+            else if (confirmDelete.type === 'session') handleDeleteSession(confirmDelete.id);
+          }}>{t.yes}</button>
         </div>
       </Modal>
 
