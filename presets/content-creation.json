@@ -1,0 +1,43 @@
+{
+  "name": "content-creation",
+  "description": "Content creation team for blogs and documentation",
+  "agents": [
+    {
+      "name": "Editor",
+      "description": "Content planning and editorial oversight",
+      "responsibilities": ["Content strategy", "Editorial calendar", "Quality control"],
+      "outputs": ["Editorial guidelines", "Content calendar", "Style guide"],
+      "permissions": ["assign_content", "approve_publication"]
+    },
+    {
+      "name": "Writer",
+      "description": "Content creation and writing",
+      "responsibilities": ["Article writing", "Research", "Drafting"],
+      "outputs": ["Articles", "Blog posts", "Documentation"],
+      "permissions": ["create_content", "edit_drafts"]
+    },
+    {
+      "name": "Reviewer",
+      "description": "Content review and fact-checking",
+      "responsibilities": ["Fact-checking", "Grammar review", "Style consistency"],
+      "outputs": ["Review notes", "Fact-check reports"],
+      "permissions": ["review_content", "request_revisions"]
+    },
+    {
+      "name": "Designer",
+      "description": "Visual content and graphics",
+      "responsibilities": ["Featured images", "Infographics", "Illustrations"],
+      "outputs": ["Images", "Graphics", "Visual assets"],
+      "permissions": ["create_visuals", "design_layouts"]
+    }
+  ],
+  "workflows": {
+    "pending": { "next": "assigned", "notify": true, "notifyAgent": "assignee" },
+    "assigned": { "next": "drafting", "notify": false },
+    "drafting": { "next": "review", "notify": true, "notifyAgent": "Reviewer" },
+    "review": { "next": "revision", "notify": true, "notifyAgent": "Writer" },
+    "revision": { "next": "final", "notify": true, "notifyAgent": "Editor" },
+    "final": { "next": "published", "notify": true, "notifyAgent": "Editor" },
+    "published": { "next": null, "notify": true, "notifyAgent": "Editor" }
+  }
+}

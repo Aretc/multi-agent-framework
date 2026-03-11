@@ -1,0 +1,40 @@
+{
+  "name": "multi-agent-framework",
+  "version": "1.0.0",
+  "description": "A flexible multi-agent collaboration framework for AI-powered software development",
+  "main": "core/index.js",
+  "bin": {
+    "maf": "./cli/index.js"
+  },
+  "scripts": {
+    "init": "node cli/index.js init",
+    "agent": "node cli/index.js agent",
+    "task": "node cli/index.js task",
+    "message": "node cli/index.js message",
+    "workflow": "node cli/index.js workflow",
+    "watch": "node cli/index.js watch"
+  },
+  "keywords": [
+    "multi-agent",
+    "ai",
+    "collaboration",
+    "workflow",
+    "automation",
+    "software-development"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/multi-agent-framework"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "core/",
+    "cli/",
+    "templates/",
+    "presets/"
+  ]
+}

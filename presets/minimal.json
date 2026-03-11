@@ -1,0 +1,35 @@
+{
+  "name": "minimal",
+  "description": "Minimal 3-agent team for small projects",
+  "agents": [
+    {
+      "name": "Coordinator",
+      "description": "Task coordination and project management",
+      "responsibilities": ["Task assignment", "Progress tracking", "Decision making"],
+      "outputs": ["Task assignments", "Progress reports"],
+      "permissions": ["assign_tasks", "change_priority"]
+    },
+    {
+      "name": "Developer",
+      "description": "Implementation and testing",
+      "responsibilities": ["Code implementation", "Testing", "Documentation"],
+      "outputs": ["Source code", "Tests", "Documentation"],
+      "permissions": ["write_code", "create_tests"]
+    },
+    {
+      "name": "Reviewer",
+      "description": "Code review and quality assurance",
+      "responsibilities": ["Code review", "Quality checks", "Standards enforcement"],
+      "outputs": ["Review reports", "Quality metrics"],
+      "permissions": ["approve_code", "request_changes"]
+    }
+  ],
+  "workflows": {
+    "pending": { "next": "assigned", "notify": true, "notifyAgent": "assignee" },
+    "assigned": { "next": "in-progress", "notify": false },
+    "in-progress": { "next": "review", "notify": true, "notifyAgent": "Reviewer" },
+    "review": { "next": "done", "notify": true, "notifyAgent": "Coordinator" },
+    "done": { "next": null, "notify": true, "notifyAgent": "Coordinator" },
+    "blocked": { "next": null, "notify": true, "notifyAgent": "Coordinator" }
+  }
+}

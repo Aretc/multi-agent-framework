@@ -1,0 +1,52 @@
+{
+  "name": "research",
+  "description": "Research project team for academic and scientific research",
+  "agents": [
+    {
+      "name": "Principal",
+      "description": "Principal investigator and project lead",
+      "responsibilities": ["Research direction", "Resource allocation", "Publication decisions"],
+      "outputs": ["Research proposals", "Grant applications", "Final reports"],
+      "permissions": ["approve_research", "allocate_resources"]
+    },
+    {
+      "name": "Researcher",
+      "description": "Primary research and data collection",
+      "responsibilities": ["Literature review", "Experiments", "Data analysis"],
+      "outputs": ["Research notes", "Data sets", "Analysis reports"],
+      "permissions": ["conduct_research", "collect_data"]
+    },
+    {
+      "name": "Analyst",
+      "description": "Data analysis and statistics",
+      "responsibilities": ["Statistical analysis", "Data visualization", "Methodology"],
+      "outputs": ["Statistical reports", "Visualizations", "Methodology docs"],
+      "permissions": ["analyze_data", "create_visualizations"]
+    },
+    {
+      "name": "Writer",
+      "description": "Academic writing and publication",
+      "responsibilities": ["Paper writing", "Abstract preparation", "Citation management"],
+      "outputs": ["Papers", "Abstracts", "Bibliographies"],
+      "permissions": ["write_papers", "manage_citations"]
+    },
+    {
+      "name": "Reviewer",
+      "description": "Internal review and quality assurance",
+      "responsibilities": ["Peer review", "Methodology check", "Quality control"],
+      "outputs": ["Review reports", "Feedback notes", "Quality checklists"],
+      "permissions": ["review_papers", "request_revisions"]
+    }
+  ],
+  "workflows": {
+    "pending": { "next": "assigned", "notify": true, "notifyAgent": "assignee" },
+    "assigned": { "next": "research", "notify": false },
+    "research": { "next": "analysis", "notify": true, "notifyAgent": "Analyst" },
+    "analysis": { "next": "writing", "notify": true, "notifyAgent": "Writer" },
+    "writing": { "next": "review", "notify": true, "notifyAgent": "Reviewer" },
+    "review": { "next": "revision", "notify": true, "notifyAgent": "Researcher" },
+    "revision": { "next": "approved", "notify": true, "notifyAgent": "Principal" },
+    "approved": { "next": "published", "notify": true, "notifyAgent": "Principal" },
+    "published": { "next": null, "notify": true, "notifyAgent": "Principal" }
+  }
+}

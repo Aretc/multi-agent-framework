@@ -1,0 +1,6 @@
+[
+  {"title": "Setup Project Structure", "assignee": "Developer", "priority": "P1", "description": "Create basic project structure and configuration files"},
+  {"title": "Implement Core Features", "assignee": "Developer", "priority": "P1", "description": "Implement main application features"},
+  {"title": "Write Unit Tests", "assignee": "Tester", "priority": "P2", "description": "Write comprehensive unit tests"},
+  {"title": "Code Review", "assignee": "Reviewer", "priority": "P2", "description": "Review code quality and standards"}
+]

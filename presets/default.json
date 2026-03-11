@@ -1,0 +1,71 @@
+{
+  "name": "default",
+  "description": "Default 8-agent software development team",
+  "agents": [
+    {
+      "name": "Coordinator",
+      "description": "Task coordination and progress tracking",
+      "responsibilities": ["Task assignment", "Progress monitoring", "Conflict resolution", "Resource allocation"],
+      "outputs": ["Task assignments", "Progress reports", "Decision records"],
+      "permissions": ["assign_tasks", "change_priority", "resolve_conflicts"]
+    },
+    {
+      "name": "ProductManager",
+      "description": "Product planning and requirements analysis",
+      "responsibilities": ["Requirement gathering", "Feature prioritization", "User story creation", "Product roadmap"],
+      "outputs": ["Requirements docs", "User stories", "Product roadmap"],
+      "permissions": ["define_requirements", "prioritize_features"]
+    },
+    {
+      "name": "Architect",
+      "description": "System architecture and technical decisions",
+      "responsibilities": ["System design", "Technology selection", "Architecture documentation", "Technical standards"],
+      "outputs": ["Architecture docs", "Technical specs", "Design decisions"],
+      "permissions": ["make_technical_decisions", "approve_designs"]
+    },
+    {
+      "name": "Developer",
+      "description": "Code implementation and unit testing",
+      "responsibilities": ["Feature implementation", "Unit testing", "Code documentation", "Bug fixing"],
+      "outputs": ["Source code", "Unit tests", "Code documentation"],
+      "permissions": ["write_code", "create_tests"]
+    },
+    {
+      "name": "Tester",
+      "description": "Quality verification and testing",
+      "responsibilities": ["Test planning", "Test execution", "Bug reporting", "Quality metrics"],
+      "outputs": ["Test plans", "Test reports", "Bug reports"],
+      "permissions": ["create_tests", "report_bugs"]
+    },
+    {
+      "name": "Reviewer",
+      "description": "Code review and standards enforcement",
+      "responsibilities": ["Code review", "Standards enforcement", "Best practices guidance", "Quality gates"],
+      "outputs": ["Review reports", "Standards docs", "Improvement suggestions"],
+      "permissions": ["approve_code", "request_changes"]
+    },
+    {
+      "name": "BusinessManager",
+      "description": "Business analysis and market strategy",
+      "responsibilities": ["Market analysis", "Business modeling", "Competitive analysis", "Pricing strategy"],
+      "outputs": ["Business plans", "Market reports", "Financial projections"],
+      "permissions": ["define_strategy", "analyze_market"]
+    },
+    {
+      "name": "Designer",
+      "description": "UI/UX design and user experience",
+      "responsibilities": ["UI design", "UX research", "Design systems", "Prototyping"],
+      "outputs": ["Design specs", "Prototypes", "Style guides"],
+      "permissions": ["create_designs", "define_ux"]
+    }
+  ],
+  "workflows": {
+    "pending": { "next": "assigned", "notify": true, "notifyAgent": "assignee" },
+    "assigned": { "next": "in-progress", "notify": false },
+    "in-progress": { "next": "review", "notify": true, "notifyAgent": "Reviewer" },
+    "review": { "next": "testing", "notify": true, "notifyAgent": "Tester" },
+    "testing": { "next": "done", "notify": true, "notifyAgent": "Coordinator" },
+    "done": { "next": null, "notify": true, "notifyAgent": "Coordinator" },
+    "blocked": { "next": null, "notify": true, "notifyAgent": "Coordinator" }
+  }
+}
