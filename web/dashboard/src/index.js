@@ -53,6 +53,8 @@ const translations = {
     sessionDeleted: 'Session deleted', closeSession: 'Close', openSession: 'Open',
     viewDetails: 'View', result: 'Result', toolResult: 'Tool Result',
     assign: 'Assign', unassign: 'Unassign',
+    addTool: 'Add Tool', toolHandler: 'Handler Code', toolHandlerPlaceholder: 'async (params) => {\n  // Your code here\n  return params;\n}',
+    toolCreated: 'Tool created', toolDeleted: 'Tool deleted',
   },
   zh: {
     dashboard: '仪表盘', agents: '智能体', tasks: '任务', sessions: '会话',
@@ -101,6 +103,8 @@ const translations = {
     sessionDeleted: '会话已删除', closeSession: '关闭', openSession: '打开',
     viewDetails: '查看', result: '结果', toolResult: '工具结果',
     assign: '分配', unassign: '取消分配',
+    addTool: '添加工具', toolHandler: '处理函数代码', toolHandlerPlaceholder: 'async (params) => {\n  // 在这里编写代码\n  return params;\n}',
+    toolCreated: '工具已创建', toolDeleted: '工具已删除',
   }
 };
 
@@ -219,6 +223,7 @@ function App() {
   const [showAddSession, setShowAddSession] = useState(false);
   const [showTaskDetails, setShowTaskDetails] = useState(null);
   const [showToolResult, setShowToolResult] = useState(null);
+  const [showAddTool, setShowAddTool] = useState(false);
   const [selectedTool, setSelectedTool] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   
@@ -228,6 +233,7 @@ function App() {
   const [mcpForm, setMcpForm] = useState({ name: '', command: '', args: '' });
   const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'medium', assignedAgentId: '' });
   const [sessionForm, setSessionForm] = useState({ name: '' });
+  const [toolForm, setToolForm] = useState({ name: '', description: '', category: 'general', handler: 'async (params) => {\n  return params;\n}' });
   const [toolParams, setToolParams] = useState('{}');
   const [toolResult, setToolResult] = useState(null);
 
@@ -398,6 +404,21 @@ function App() {
       }).catch(e => showToast(e.message, 'error'));
   };
 
+  const handleAddTool = () => {
+    if (!toolForm.name || !toolForm.handler) return;
+    fetch(`${API_BASE}/tools`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toolForm) })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) { setShowAddTool(false); setToolForm({ name: '', description: '', category: 'general', handler: 'async (params) => {\n  return params;\n}' }); showToast(t.toolCreated); fetchData(); }
+        else showToast(data.error || t.operationFailed, 'error');
+      }).catch(e => showToast(e.message, 'error'));
+  };
+
+  const handleDeleteTool = (name) => {
+    fetch(`${API_BASE}/tools/${name}`, { method: 'DELETE' })
+      .then(() => { setConfirmDelete(null); showToast(t.toolDeleted); fetchData(); });
+  };
+
   const filteredLogs = logs.filter(log => logFilter === 'all' || log.type === logFilter);
 
   const renderDashboard = () => (
@@ -539,7 +560,10 @@ function App() {
 
   const renderTools = () => (
     <div style={styles.panel}>
-      <div style={styles.panelHeader}><span style={styles.panelTitle}>{t.toolsPanel} ({tools.length})</span></div>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.toolsPanel} ({tools.length})</span>
+        <button style={{ ...styles.btn, ...styles.btnPrimary, ...styles.btnSmall }} onClick={() => setShowAddTool(true)}>+ {t.addTool}</button>
+      </div>
       <div style={styles.panelBody}>
         {tools.length === 0 ? <div style={styles.empty}>{t.noTools}</div> : (
           <table style={styles.table}>
@@ -554,6 +578,7 @@ function App() {
                   <div style={styles.flex}>
                     <button style={{ ...styles.btn, ...styles.btnSuccess, ...styles.btnSmall }} onClick={() => { setSelectedTool(tool); setToolParams('{}'); setToolResult(null); setShowToolExec(true); }}>{t.run}</button>
                     {tool.status === 'disabled' ? <button style={{ ...styles.btn, ...styles.btnSecondary, ...styles.btnSmall }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/enable`, { method: 'POST' }).then(fetchData)}>{t.enable}</button> : <button style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/disable`, { method: 'POST' }).then(fetchData)}>{t.disable}</button>}
+                    <button style={{ ...styles.btn, ...styles.btnDanger, ...styles.btnSmall }} onClick={() => setConfirmDelete({ type: 'tool', id: tool.name })}>{t.remove}</button>
                   </div>
                 </td>
               </tr>
@@ -737,6 +762,24 @@ function App() {
         <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddMCP(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddMCP}>{t.add}</button></div>
       </Modal>
 
+      <Modal isOpen={showAddTool} onClose={() => setShowAddTool(false)} title={t.addTool}>
+        <div style={styles.formGroup}><label style={styles.label}>{t.name}</label><input style={styles.input} value={toolForm.name} onChange={e => setToolForm({ ...toolForm, name: e.target.value })} placeholder="my_tool" /></div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.description}</label><input style={styles.input} value={toolForm.description} onChange={e => setToolForm({ ...toolForm, description: e.target.value })} placeholder="Tool description" /></div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.toolCategory}</label>
+          <select style={styles.select} value={toolForm.category} onChange={e => setToolForm({ ...toolForm, category: e.target.value })}>
+            <option value="general">{t.general}</option>
+            <option value="file">File</option>
+            <option value="code">Code</option>
+            <option value="network">Network</option>
+            <option value="data">Data</option>
+            <option value="text">Text</option>
+            <option value="system">System</option>
+          </select>
+        </div>
+        <div style={styles.formGroup}><label style={styles.label}>{t.toolHandler}</label><textarea style={{ ...styles.textarea, minHeight: '150px', fontFamily: 'monospace', fontSize: '12px' }} value={toolForm.handler} onChange={e => setToolForm({ ...toolForm, handler: e.target.value })} placeholder={t.toolHandlerPlaceholder} /></div>
+        <div style={styles.modalFooter}><button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={() => setShowAddTool(false)}>{t.cancelBtn}</button><button style={{ ...styles.btn, ...styles.btnPrimary }} onClick={handleAddTool}>{t.create}</button></div>
+      </Modal>
+
       <Modal isOpen={showToolExec} onClose={() => { setShowToolExec(false); setToolResult(null); }} title={`${t.executeTool}: ${selectedTool?.name}`}>
         <div style={styles.formGroup}><label style={styles.label}>{t.toolParams}</label><textarea style={{ ...styles.textarea, minHeight: '150px', fontFamily: 'monospace' }} value={toolParams} onChange={e => setToolParams(e.target.value)} /></div>
         {toolResult && (
@@ -759,6 +802,7 @@ function App() {
             if (confirmDelete.type === 'agent') handleRemoveAgent(confirmDelete.id);
             else if (confirmDelete.type === 'task') handleDeleteTask(confirmDelete.id);
             else if (confirmDelete.type === 'session') handleDeleteSession(confirmDelete.id);
+            else if (confirmDelete.type === 'tool') handleDeleteTool(confirmDelete.id);
           }}>{t.yes}</button>
         </div>
       </Modal>

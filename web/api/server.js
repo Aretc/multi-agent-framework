@@ -372,6 +372,38 @@ function createApp(options) {
     res.json({ success: true, data: stats });
   });
 
+  app.post('/api/tools', async function(req, res) {
+    try {
+      const definition = req.body;
+      if (!definition.name) {
+        return res.status(400).json({ success: false, error: 'Tool name is required' });
+      }
+      if (!definition.handler) {
+        return res.status(400).json({ success: false, error: 'Tool handler is required' });
+      }
+      if (typeof definition.handler === 'string') {
+        try {
+          definition.handler = eval(definition.handler);
+        } catch (e) {
+          return res.status(400).json({ success: false, error: 'Invalid handler code: ' + e.message });
+        }
+      }
+      const tool = framework.registerTool(definition);
+      res.json({ success: true, data: tool.toJSON() });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/tools/:name', async function(req, res) {
+    try {
+      const result = framework.unregisterTool(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // Skills
   app.get('/api/skills', function(req, res) {
     const skills = framework.listSkills();
