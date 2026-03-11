@@ -39,6 +39,13 @@
 - **完整管理**：创建、编辑、删除智能体、任务、会话、工具、技能、规则、MCP 客户端
 - **活动日志**：实时日志 + 筛选功能 (info/warning/error)
 - **双语支持**：中英文 i18n 国际化
+- **AI 聊天界面**：对话式 LLM 交互，支持 Markdown 渲染
+
+### LLM 集成
+- **多提供商支持**：OpenAI、Anthropic、Ollama、LM Studio、Mock
+- **工作流上下文注入**：LLM 自动理解 MeowTea 框架
+- **可配置系统提示**：控制工作流介绍行为
+- **聊天 API**：RESTful API 用于 LLM 交互
 
 ## 快速开始
 
@@ -180,6 +187,10 @@ meowtea/
     "maxRejectCount": 3,
     "maxTaskRetries": 3,
     "maxConcurrentAgents": 5
+  },
+  "workflowPrompt": {
+    "enabled": true,
+    "detailed": false
   }
 }
 ```
@@ -298,6 +309,15 @@ POST /api/orchestrator/clarify  # 提供澄清
 POST /api/orchestrator/pause    # 暂停
 POST /api/orchestrator/resume   # 恢复
 POST /api/orchestrator/cancel   # 取消
+```
+
+### LLM
+```
+GET  /api/llm/config            # 获取 LLM 配置
+POST /api/llm/config            # 保存 LLM 配置
+POST /api/llm/test              # 测试 LLM 连接
+POST /api/llm/chat              # 与 LLM 聊天（自动注入工作流上下文）
+POST /api/llm/embed             # 生成嵌入向量
 ```
 
 ## 使用场景

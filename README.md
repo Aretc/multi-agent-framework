@@ -39,6 +39,13 @@ A flexible, extensible framework for AI agent collaboration with intelligent tas
 - **Full Management**: Create, edit, delete agents, tasks, sessions, tools, skills, rules, MCP clients
 - **Activity Log**: Real-time log with filtering (info/warning/error)
 - **Bilingual Support**: English/Chinese i18n
+- **AI Chat Interface**: Conversational chat with LLM, Markdown rendering support
+
+### LLM Integration
+- **Multiple Providers**: OpenAI, Anthropic, Ollama, LM Studio, Mock
+- **Workflow Context Injection**: LLM automatically understands MeowTea framework
+- **Configurable System Prompts**: Control workflow introduction behavior
+- **Chat API**: RESTful API for LLM interactions
 
 ## Quick Start
 
@@ -180,6 +187,10 @@ meowtea/
     "maxRejectCount": 3,
     "maxTaskRetries": 3,
     "maxConcurrentAgents": 5
+  },
+  "workflowPrompt": {
+    "enabled": true,
+    "detailed": false
   }
 }
 ```
@@ -298,6 +309,15 @@ POST /api/orchestrator/clarify  # Provide clarification
 POST /api/orchestrator/pause    # Pause
 POST /api/orchestrator/resume   # Resume
 POST /api/orchestrator/cancel   # Cancel
+```
+
+### LLM
+```
+GET  /api/llm/config            # Get LLM configuration
+POST /api/llm/config            # Save LLM configuration
+POST /api/llm/test              # Test LLM connection
+POST /api/llm/chat              # Chat with LLM (with workflow context)
+POST /api/llm/embed             # Generate embeddings
 ```
 
 ## Use Cases
