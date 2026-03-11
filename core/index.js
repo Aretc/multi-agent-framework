@@ -1279,5 +1279,9 @@ module.exports = {
   Orchestrator: require('./orchestrator').Orchestrator,
   Task: require('./orchestrator').Task,
   ORCHESTRATOR_STATUS: require('./orchestrator').ORCHESTRATOR_STATUS,
-  TASK_STATUS: require('./orchestrator').TASK_STATUS
+  TASK_STATUS: require('./orchestrator').TASK_STATUS,
+  PromptManager: require('./prompts').PromptManager,
+  PromptBuilder: require('./prompts').PromptBuilder,
+  PROMPT_CATEGORIES: require('./prompts').PROMPT_CATEGORIES,
+  DEFAULT_TEMPLATES: require('./prompts').DEFAULT_TEMPLATES
 };

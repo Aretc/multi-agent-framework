@@ -12,6 +12,7 @@
 const { createLLMAdapter } = require('./llm/adapter');
 const { AgentMemory } = require('./memory');
 const { ToolManager, BUILTIN_TOOLS } = require('./tools');
+const { createPromptManager, PROMPT_CATEGORIES } = require('./prompts');
 const { EventEmitter } = require('events');
 
 const DEFAULT_AGENT_CONFIG = {
@@ -92,6 +93,8 @@ class AgentRuntime extends EventEmitter {
         }.bind(this));
       }
     }
+    
+    this.promptManager = createPromptManager(this.config.prompts || {});
     
     this.state = AGENT_STATES.IDLE;
     this.currentTask = null;
@@ -400,41 +403,49 @@ class AgentRuntime extends EventEmitter {
   }
 
   buildSystemPrompt(context) {
-    let prompt = 'You are ' + this.name;
-    if (this.role) prompt += ', a ' + this.role;
-    if (this.description) prompt += '. ' + this.description;
+    const self = this;
+    
+    if (context.promptTemplate) {
+      const template = this.promptManager.getTemplate(context.promptTemplate);
+      if (template) {
+        const vars = {
+          name: this.name,
+          role: this.role,
+          description: this.description || '',
+          ...context.promptVariables
+        };
+        
+        if (this.toolManager) {
+          vars.tools = this.toolManager.listTools();
+        }
+        
+        return this.promptManager.renderTemplate(template, vars);
+      }
+    }
+    
+    const builder = this.promptManager.createPromptBuilder();
+    
+    builder.system('You are ' + this.name + (this.role ? ', a ' + this.role : '') + (this.description ? '. ' + this.description : ''));
     
     if (this.config.behavior.enableCoT) {
-      prompt += '\n\nUse Chain-of-Thought reasoning. Format your response as:\n';
-      prompt += '```json\n{"reasoning": "Step-by-step reasoning...", "conclusion": "Your conclusion", "action": {...} or "toolCall": {...} or "content": "..."}\n```';
+      builder.task('Use Chain-of-Thought reasoning. Format your response as:\n```json\n{"reasoning": "Step-by-step reasoning...", "conclusion": "Your conclusion", "action": {...} or "toolCall": {...} or "content": "..."}\n```');
     }
     
     if (this.toolManager) {
       const tools = this.toolManager.listTools();
       if (tools.length > 0) {
-        prompt += '\n\nAvailable tools:\n';
-        tools.forEach(function(tool) {
-          prompt += '- ' + tool.name + ': ' + tool.description + '\n';
-          if (tool.parameters) {
-            prompt += '  Parameters: ' + JSON.stringify(tool.parameters) + '\n';
-          }
-        });
-        prompt += '\nTo use a tool: {"toolCall": {"name": "tool_name", "params": {...}}}';
+        builder.tools(tools);
+        builder.output('To use a tool: {"toolCall": {"name": "tool_name", "params": {...}}}');
       }
     }
     
-    prompt += '\n\nAvailable actions:\n';
-    prompt += '- remember: Store in short-term memory\n';
-    prompt += '- memorize: Store in long-term memory\n';
-    prompt += '- recall: Retrieve from memory\n';
-    prompt += '- respond: Provide final response\n';
-    prompt += '\nTo use an action: {"action": {"type": "action_name", ...params}}';
+    builder.context('Available actions:\n- remember: Store in short-term memory\n- memorize: Store in long-term memory\n- recall: Retrieve from memory\n- respond: Provide final response\n\nTo use an action: {"action": {"type": "action_name", ...params}}');
     
     if (context.systemPrompt) {
-      prompt += '\n\n' + context.systemPrompt;
+      builder.context(context.systemPrompt);
     }
     
-    return prompt;
+    return builder.build();
   }
 
   buildCoTPrompt() {
@@ -663,6 +674,30 @@ class AgentRuntime extends EventEmitter {
   resetAll() {
     this.reset();
     this.conversationHistory = [];
+  }
+
+  registerPromptTemplate(template) {
+    return this.promptManager.registerTemplate(template);
+  }
+
+  getPromptTemplate(id) {
+    return this.promptManager.getTemplate(id);
+  }
+
+  listPromptTemplates(category) {
+    return this.promptManager.listTemplates(category);
+  }
+
+  renderPrompt(templateId, variables) {
+    return this.promptManager.render(templateId, variables);
+  }
+
+  optimizePrompt(prompt, options) {
+    return this.promptManager.optimize(prompt, options);
+  }
+
+  createPromptBuilder() {
+    return this.promptManager.createPromptBuilder();
   }
 }
 
