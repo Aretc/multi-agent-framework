@@ -257,7 +257,11 @@ class MultiAgentFramework {
       .replace(/{description}/g, task.description || '')
       .replace(/{criteria}/g, (task.criteria || []).map(function(c) { return '- [ ] ' + c; }).join('\n'));
 
-    const taskPath = path.join(this.rootDir, 'tasks', task.status, id + '.md');
+    const taskDir = path.join(this.rootDir, 'tasks', task.status);
+    if (!fs.existsSync(taskDir)) {
+      fs.mkdirSync(taskDir, { recursive: true });
+    }
+    const taskPath = path.join(taskDir, id + '.md');
     fs.writeFileSync(taskPath, content, 'utf-8');
     
     this.tasks.set(id, task);

@@ -299,6 +299,26 @@ class Orchestrator {
     return this;
   }
 
+  addTask(taskData) {
+    if (!this.currentSession) {
+      this.currentSession = this.sessionManager.createSession();
+    }
+    
+    const task = new Task({
+      title: taskData.title,
+      description: taskData.description || '',
+      priority: taskData.priority || 'medium',
+      assignedAgentId: taskData.assignedAgentId || null,
+      ...taskData
+    });
+    
+    this.tasks.set(task.id, task);
+    this.executionQueue.push(task.id);
+    this.emit('task_created', task);
+    
+    return task;
+  }
+
   async processUserInput(userInput, context) {
     context = context || {};
     this.status = ORCHESTRATOR_STATUS.PLANNING;

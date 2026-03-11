@@ -167,6 +167,43 @@ function createApp(options) {
     res.json({ success: true, data: tasks });
   });
 
+  app.post('/api/tasks/orchestrator', function(req, res) {
+    try {
+      const task = framework.orchestrator.addTask(req.body);
+      io.emit('task:created', task.toJSON());
+      res.json({ success: true, data: task.toJSON() });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tasks/orchestrator/:id/cancel', function(req, res) {
+    try {
+      const task = framework.orchestrator.tasks.get(req.params.id);
+      if (task) {
+        task.status = 'cancelled';
+        io.emit('task:updated', task.toJSON());
+        res.json({ success: true, data: task.toJSON() });
+      } else {
+        res.status(404).json({ success: false, error: 'Task not found' });
+      }
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/tasks/orchestrator/:id', function(req, res) {
+    try {
+      const removed = framework.orchestrator.tasks.delete(req.params.id);
+      if (removed) {
+        io.emit('task:deleted', { id: req.params.id });
+      }
+      res.json({ success: removed });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.post('/api/tasks', function(req, res) {
     const result = framework.createTask(req.body);
     io.emit('task:created', result);
