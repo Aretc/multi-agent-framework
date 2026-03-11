@@ -1,17 +1,44 @@
 # Multi-Agent Framework
 
-A flexible, extensible framework for AI agent collaboration in software development and beyond.
+A flexible, extensible framework for AI agent collaboration with intelligent task orchestration, session isolation, and a modern web dashboard.
+
+[中文文档](./README_CN.md)
 
 ## Features
 
-- **Configurable Agent System**: Define custom agents with specific roles, responsibilities, and permissions
-- **Task Management**: Create, assign, track, and manage tasks across agents
-- **Message Passing**: Built-in communication protocol between agents
-- **Workflow Automation**: Automatic task transitions and notifications
-- **Memory System**: Three-tier memory (short-term, long-term, episodic) for each agent
-- **File-based Storage**: Simple, transparent data storage using Markdown and JSON
-- **CLI Tool**: Full-featured command-line interface
-- **Extensible**: Easy to customize for different use cases
+### Core Features
+- **Dynamic Agent System**: Create agents dynamically based on task requirements with 10 built-in agent types
+- **Session Isolation**: Each agent operates in isolated sessions to prevent memory pollution
+- **Task Validation & Rejection**: Built-in task validation with rejection handling and automatic agent recreation
+- **Clarification Mechanism**: Interactive clarification when user intent is unclear
+- **Three-Tier Memory**: Short-term, long-term, and episodic memory for each agent
+
+### Tool System
+- **Built-in Tools**: File operations, code execution, HTTP requests, JSON processing, text manipulation, shell commands
+- **Custom Tools**: Create and register custom tools with validation
+- **Tool Management**: Enable/disable tools dynamically via CLI or Dashboard
+
+### Skill System
+- **Skill Templates**: Basic, Code, Analysis, Automation templates
+- **Skill Registry**: Install, enable, disable skills
+- **Custom Skills**: Create specialized skills for specific tasks
+
+### Rule Engine
+- **Rule Types**: Validation, Constraint, Trigger, Guard rules
+- **Priority System**: Configurable rule priorities
+- **Dynamic Rules**: Add/remove rules at runtime
+
+### MCP Integration
+- **Model Context Protocol**: Connect to external MCP servers
+- **Tool Discovery**: Automatic tool discovery from MCP servers
+- **Resource Access**: Access external resources through MCP
+
+### Web Dashboard
+- **Real-time Monitoring**: WebSocket-based real-time updates
+- **Statistics Panel**: Sessions, agents, tasks, completions
+- **Full Management**: Create, edit, delete agents, tasks, sessions, tools, skills, rules, MCP clients
+- **Activity Log**: Real-time log with filtering (info/warning/error)
+- **Bilingual Support**: English/Chinese i18n
 
 ## Quick Start
 
@@ -19,74 +46,96 @@ A flexible, extensible framework for AI agent collaboration in software developm
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/multi-agent-framework.git
+git clone https://github.com/Aretc/multi-agent-framework.git
 
 # Navigate to the framework directory
 cd multi-agent-framework
+
+# Install dependencies
+npm install
 
 # Link globally (optional)
 npm link
 ```
 
-### Initialize a New Project
+### Start Dashboard
 
 ```bash
-# Create a new project directory
-mkdir my-project && cd my-project
+# Start the web dashboard
+cd web/api
+node server.js
 
-# Initialize with default preset (8 agents)
-maf init default
-
-# Or use minimal preset (3 agents)
-maf init minimal
-
-# Or start from scratch
-maf init none
+# Open http://localhost:3000 in your browser
 ```
 
-### Basic Usage
+### CLI Usage
 
 ```bash
-# List available agents
+# Initialize a new project
+maf init default
+
+# Ask the orchestrator
+maf ask "Create a REST API for user management"
+
+# Provide clarification
+maf clarify "Users need authentication; Use JWT tokens"
+
+# Check status
+maf status
+
+# Manage agents
 maf agent list
+maf agent create coder --name "API Developer"
+maf agent templates
 
-# Create a task
-maf task create "Implement user authentication" --priority P1
+# Manage sessions
+maf session list
+maf session show <id>
+maf session close <id>
 
-# Assign task to an agent
-maf task assign TASK-001 Developer
+# Manage tools
+maf tool list
+maf tool enable <name>
+maf tool disable <name>
 
-# Update task status
-maf task status TASK-001 in-progress
+# Manage skills
+maf skill list
+maf skill install <name> --template code
 
-# List tasks
-maf task list
+# Manage rules
+maf rule list
+maf rule add <name> --type validation
 
-# Transfer task between agents
-maf workflow transfer TASK-001 Developer Reviewer
+# Manage MCP
+maf mcp list
+maf mcp connect <name> --command "npx @modelcontextprotocol/server-filesystem"
 ```
 
 ## Project Structure
 
-After initialization, your project will have:
-
 ```
-my-project/
-├── agents/              # Agent definitions (Markdown)
-├── tasks/               # Task files organized by status
-│   ├── pending/
-│   ├── assigned/
-│   ├── in-progress/
-│   ├── review/
-│   ├── testing/
-│   ├── done/
-│   └── blocked/
-├── messages/            # Agent communications
-│   ├── broadcast/       # Messages to all agents
-│   └── direct/          # Direct messages to specific agents
-├── docs/                # Project documentation
-├── .maf/                # Framework state
-└── maf.config.json      # Configuration file
+multi-agent-framework/
+├── cli/                    # CLI commands
+│   └── index.js           # Main CLI entry
+├── core/                   # Core framework
+│   ├── index.js           # Main framework class
+│   ├── orchestrator.js    # Task orchestration
+│   ├── dynamic-agent.js   # Dynamic agent factory
+│   ├── session.js         # Session management
+│   ├── memory.js          # Three-tier memory
+│   ├── tools.js           # Tool registry
+│   ├── skills.js          # Skill system
+│   ├── rules.js           # Rule engine
+│   ├── mcp.js             # MCP integration
+│   └── agent.js           # Agent runtime
+├── web/
+│   ├── api/               # REST API server
+│   │   └── server.js      # Express server
+│   └── dashboard/         # React dashboard
+│       └── src/
+│           └── index.js   # Dashboard UI
+├── maf.config.json        # Configuration
+└── package.json
 ```
 
 ## Configuration
@@ -95,370 +144,158 @@ my-project/
 
 ```json
 {
-  "agents": [
-    {
-      "name": "Developer",
-      "description": "Code implementation and testing",
-      "responsibilities": ["Feature implementation", "Unit testing"],
-      "outputs": ["Source code", "Tests"],
-      "permissions": ["write_code", "create_tests"]
-    }
-  ],
-  "workflows": {
-    "pending": { "next": "assigned", "notify": true },
-    "assigned": { "next": "in-progress", "notify": false },
-    "in-progress": { "next": "review", "notify": true, "notifyAgent": "Reviewer" }
-  }
-}
-```
-
-## Presets
-
-### Default (8 Agents)
-- Coordinator - Task coordination
-- ProductManager - Requirements
-- Architect - Technical design
-- Developer - Implementation
-- Tester - Quality assurance
-- Reviewer - Code review
-- BusinessManager - Business analysis
-- Designer - UI/UX design
-
-### Minimal (3 Agents)
-- Coordinator - Task coordination
-- Developer - Implementation
-- Reviewer - Code review
-
-### Custom Presets
-Create your own preset by adding a JSON file to the `presets/` directory.
-
-## CLI Commands
-
-### Project Management
-```bash
-maf init [preset]        # Initialize project
-maf config               # Show configuration
-```
-
-### Agent Management
-```bash
-maf agent list           # List all agents
-maf agent add <name>     # Add new agent
-maf agent show <name>    # Show agent details
-```
-
-### Task Management
-```bash
-maf task create <title> [--priority P0-P3] [--assignee <agent>]
-maf task list [status]
-maf task show <id>
-maf task assign <id> <agent>
-maf task status <id> <status>
-```
-
-### Messaging
-```bash
-maf message send <to> <subject> [--type <type>] [--priority <P0-P3>]
-maf message list [type] [agent]
-```
-
-### Workflow
-```bash
-maf workflow transfer <taskId> <fromAgent> <toAgent>
-maf workflow split <parentId> --file <config.json>
-maf workflow report <subtaskId> <result> <agent>
-maf workflow collect <parentId>
-```
-
-### Watch Mode
-```bash
-maf watch                # Auto-detect changes and send notifications
-```
-
-### Memory System
-```bash
-maf memory show <agent>              # Show agent memory stats
-maf memory remember <agent> <content>  # Add to short-term memory
-maf memory memorize <agent> <content>  # Add to long-term memory
-maf memory recall <agent> [query]      # Recall from memory
-maf memory events <agent>              # Show recent events
-maf memory clear <agent> [type]        # Clear memory
-```
-
-## Memory System
-
-Each agent has a three-tier memory system:
-
-| Memory Type | Purpose | Persistence | Capacity |
-|-------------|---------|-------------|----------|
-| **Short-term** | Working memory, current context | Session | 100 items |
-| **Long-term** | Knowledge, important facts | Persistent | 10,000 items |
-| **Episodic** | Event history, actions | Persistent | 1,000 events |
-
-### Memory Usage Example
-
-```javascript
-// Add to short-term memory (working context)
-await framework.agentRemember('Developer', 'Working on login feature', {
-  type: 'task_context',
-  importance: 0.8
-});
-
-// Add to long-term memory (persistent knowledge)
-await framework.agentMemorize('Developer', 'JWT authentication pattern', {
-  type: 'knowledge',
-  tags: ['auth', 'security']
-});
-
-// Recall from memory
-const memories = await framework.agentRecall('Developer', 'authentication');
-
-// Get context summary for LLM
-const context = await framework.getAgentContext('Developer');
-```
-
-### Memory Configuration
-
-```json
-{
+  "agents": [],
+  "workflows": {},
   "memory": {
     "enabled": true,
     "shortTerm": { "maxSize": 100, "maxAge": 3600000 },
     "longTerm": { "maxSize": 10000 },
     "episodic": { "maxEvents": 1000, "retentionDays": 30 }
-  }
-}
-```
-
-## LLM Integration
-
-The framework supports multiple LLM providers with customizable configurations.
-
-### Supported Providers
-
-| Provider | Models | Features |
-|----------|--------|----------|
-| **OpenAI** | GPT-4, GPT-3.5 | Chat, Embeddings, Tools |
-| **Anthropic** | Claude 3 | Chat, Tools |
-| **Local** | Ollama, LM Studio | Chat, Embeddings |
-| **Mock** | - | Testing without API |
-
-### LLM Configuration
-
-```json
-{
+  },
   "llm": {
-    "enabled": true,
-    "provider": "openai",
-    "model": "gpt-4",
-    "baseUrl": "https://api.openai.com/v1",
-    "apiKey": "your-api-key",
+    "enabled": false,
+    "provider": "mock",
+    "model": "default",
     "temperature": 0.7,
     "maxTokens": 4096
-  }
-}
-```
-
-### LLM CLI Commands
-
-```bash
-# Chat with an agent
-maf llm chat Developer "How should I implement authentication?"
-
-# Show LLM configuration
-maf llm config
-```
-
-### LLM API Usage
-
-```javascript
-// Chat with context from memory
-const response = await framework.chat('Developer', [
-  { role: 'user', content: 'Implement user authentication' }
-], { includeContext: true });
-
-// Generate embeddings
-const embedding = await framework.embed('authentication token');
-
-// Create custom LLM instance
-const customLLM = framework.createLLM({
-  provider: 'anthropic',
-  model: 'claude-3-sonnet-20240229',
-  apiKey: process.env.ANTHROPIC_API_KEY
-});
-```
-
-## Tool System
-
-Agents can use tools to interact with the environment.
-
-### Built-in Tools
-
-| Tool | Description | Required Params |
-|------|-------------|-----------------|
-| `file_read` | Read file content | `path` |
-| `file_write` | Write to file | `path`, `content` |
-| `file_exists` | Check file existence | `path` |
-| `directory_list` | List directory | `path` |
-| `shell_execute` | Run shell command | `command` |
-| `http_request` | Make HTTP request | `url` |
-| `json_parse` | Parse JSON | `text` |
-| `json_stringify` | To JSON string | `data` |
-| `text_search` | Search text | `text`, `pattern` |
-| `text_replace` | Replace text | `text`, `pattern`, `replacement` |
-
-### Tool CLI Commands
-
-```bash
-# List available tools
-maf tool list
-
-# Execute a tool
-maf tool exec file_read '{"path": "./README.md"}'
-```
-
-### Tool API Usage
-
-```javascript
-// Register custom tool
-framework.registerTool({
-  name: 'database_query',
-  description: 'Execute database query',
-  parameters: {
-    query: { type: 'string', description: 'SQL query' }
   },
-  required: ['query'],
-  handler: async (params) => {
-    // Execute query
-    return { rows: [] };
-  }
-});
-
-// Execute tool
-const result = await framework.executeTool('file_read', {
-  path: './config.json'
-});
-```
-
-## Agent Runtime
-
-The Agent Runtime combines LLM, Memory, and Tools for intelligent agent behavior.
-
-### ReAct Loop
-
-```
-Think → Act → Observe → Think → ...
-```
-
-### Running Agents
-
-```bash
-# Run agent with input
-maf run Developer "Implement user login feature"
-```
-
-### Runtime API
-
-```javascript
-// Create agent runtime
-const runtime = await framework.createAgentRuntime('Developer', {
-  llm: { provider: 'openai', model: 'gpt-4' },
-  tools: ['file_read', 'file_write', 'shell_execute']
-});
-
-// Run agent
-const result = await runtime.run('Implement authentication');
-
-// Direct runtime usage
-const runtime = framework.getAgentRuntime('Developer');
-await runtime.remember('Working on login feature');
-const memories = await runtime.recall('login');
-```
-
-## Workflow Example
-
-```bash
-# 1. Create a main task
-maf task create "Build REST API" --priority P1
-
-# 2. Split into subtasks (create split-config.json first)
-maf workflow split TASK-001 --file split-config.json
-
-# 3. Sub-agents report completion
-maf workflow report TASK-001-A "API endpoints implemented" Developer
-maf workflow report TASK-001-B "Tests passing" Tester
-
-# 4. Collect results
-maf workflow collect TASK-001
-```
-
-## API Usage
-
-```javascript
-const { MultiAgentFramework } = require('multi-agent-framework');
-
-const framework = new MultiAgentFramework({
-  rootDir: './my-project'
-});
-
-// Initialize project
-framework.initProject({ preset: 'default' });
-
-// Create task
-const task = framework.createTask({
-  title: 'New feature',
-  priority: 'P1',
-  assignee: 'Developer'
-});
-
-// Transfer task
-framework.transferTask(task.id, 'Developer', 'Reviewer');
-
-// Create message
-framework.createMessage({
-  type: 'NOTIFICATION',
-  from: 'Coordinator',
-  to: '*',
-  subject: 'Sprint started'
-});
-```
-
-## Extending the Framework
-
-### Adding Custom Agents
-
-1. Add to `maf.config.json`:
-```json
-{
-  "agents": [
-    {
-      "name": "DevOps",
-      "description": "Infrastructure and deployment",
-      "responsibilities": ["CI/CD", "Infrastructure"],
-      "outputs": ["Pipelines", "Configs"],
-      "permissions": ["deploy", "configure"]
-    }
-  ]
-}
-```
-
-2. Create `agents/DevOps.md` with detailed role definition.
-
-### Custom Workflows
-
-Modify the `workflows` section in `maf.config.json`:
-
-```json
-{
-  "workflows": {
-    "pending": { "next": "assigned", "notify": true, "notifyAgent": "assignee" },
-    "assigned": { "next": "in-progress", "notify": false },
-    "in-progress": { "next": "testing", "notify": true, "notifyAgent": "Tester" },
-    "testing": { "next": "staging", "notify": true, "notifyAgent": "DevOps" },
-    "staging": { "next": "production", "notify": true, "notifyAgent": "DevOps" },
-    "production": { "next": null, "notify": true, "notifyAgent": "Coordinator" }
+  "tools": {
+    "enabled": true,
+    "builtin": true,
+    "custom": []
+  },
+  "skills": {
+    "enabled": true
+  },
+  "rules": {
+    "enabled": true
+  },
+  "mcp": {
+    "enabled": true
+  },
+  "orchestrator": {
+    "enabled": true,
+    "maxRejectCount": 3,
+    "maxTaskRetries": 3,
+    "maxConcurrentAgents": 5
   }
 }
+```
+
+## Agent Types
+
+| Type | Description | Capabilities |
+|------|-------------|--------------|
+| **general** | General-purpose agent | reasoning, analysis, communication |
+| **coder** | Code implementation | coding, debugging, testing, code_review |
+| **researcher** | Research & analysis | research, analysis, summarization, fact_checking |
+| **writer** | Content creation | writing, editing, formatting, translation |
+| **analyzer** | Data analysis | analysis, visualization, reporting |
+| **tester** | Quality assurance | testing, validation, bug_reporting |
+| **reviewer** | Code review | code_review, feedback, suggestions |
+| **designer** | UI/UX design | design, prototyping, user_experience |
+| **planner** | Project planning | planning, scheduling, estimation |
+| **coordinator** | Task coordination | coordination, communication, management |
+
+## Built-in Tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `file_read` | Read file content | `path`, `encoding` |
+| `file_write` | Write to file | `path`, `content`, `encoding` |
+| `file_list` | List directory | `path`, `recursive`, `pattern` |
+| `file_delete` | Delete file/directory | `path`, `recursive` |
+| `code_execute` | Execute JavaScript | `code`, `timeout` |
+| `api_call` | HTTP request | `url`, `method`, `headers`, `body` |
+| `json_parse` | Parse JSON | `string` |
+| `json_stringify` | To JSON string | `object`, `pretty` |
+| `text_process` | Text operations | `text`, `operation`, `options` |
+| `shell_exec` | Shell command | `command`, `cwd`, `timeout` |
+
+## API Reference
+
+### System
+```
+GET  /api/system/stats          # System statistics
+```
+
+### Agents
+```
+GET  /api/agents                # List all agents
+POST /api/agents                # Create agent
+GET  /api/agents/templates      # List templates
+GET  /api/agents/:id            # Get agent details
+DELETE /api/agents/:id          # Delete agent
+```
+
+### Tasks
+```
+GET  /api/tasks/orchestrator    # List orchestrator tasks
+POST /api/tasks/orchestrator    # Create task
+POST /api/tasks/orchestrator/:id/cancel  # Cancel task
+DELETE /api/tasks/orchestrator/:id       # Delete task
+```
+
+### Sessions
+```
+GET  /api/sessions              # List sessions
+POST /api/sessions              # Create session
+GET  /api/sessions/:id          # Get session
+POST /api/sessions/:id/close    # Close session
+DELETE /api/sessions/:id        # Delete session
+```
+
+### Tools
+```
+GET  /api/tools                 # List tools
+POST /api/tools                 # Create tool
+DELETE /api/tools/:name         # Delete tool
+POST /api/tools/:name/execute   # Execute tool
+POST /api/tools/:name/enable    # Enable tool
+POST /api/tools/:name/disable   # Disable tool
+GET  /api/tools/stats           # Tool statistics
+```
+
+### Skills
+```
+GET  /api/skills                # List skills
+POST /api/skills/install        # Install skill
+GET  /api/skills/:name          # Get skill
+POST /api/skills/:name/enable   # Enable skill
+POST /api/skills/:name/disable  # Disable skill
+POST /api/skills/:name/execute  # Execute skill
+DELETE /api/skills/:name        # Uninstall skill
+```
+
+### Rules
+```
+GET  /api/rules                 # List rules
+POST /api/rules                 # Create rule
+GET  /api/rules/:name           # Get rule
+POST /api/rules/:name/enable    # Enable rule
+POST /api/rules/:name/disable   # Disable rule
+DELETE /api/rules/:name         # Delete rule
+```
+
+### MCP
+```
+GET  /api/mcp/clients           # List MCP clients
+POST /api/mcp/clients           # Add MCP client
+GET  /api/mcp/clients/:name     # Get client
+POST /api/mcp/clients/:name/connect    # Connect client
+POST /api/mcp/clients/:name/disconnect # Disconnect client
+DELETE /api/mcp/clients/:name   # Delete client
+GET  /api/mcp/tools             # List all MCP tools
+```
+
+### Orchestrator
+```
+GET  /api/orchestrator/status   # Get status
+POST /api/orchestrator/ask      # Send instruction
+POST /api/orchestrator/clarify  # Provide clarification
+POST /api/orchestrator/pause    # Pause
+POST /api/orchestrator/resume   # Resume
+POST /api/orchestrator/cancel   # Cancel
 ```
 
 ## Use Cases
@@ -468,10 +305,11 @@ Modify the `workflows` section in `maf.config.json`:
 - **Research Projects**: Researchers, analysts, writers collaborating
 - **Business Operations**: Strategy, operations, finance teams
 - **Game Development**: Designers, artists, programmers, testers
+- **Data Analysis**: Analysts, visualizers, reporters
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines.
+Contributions are welcome! Please feel free to submit issues and pull requests.
 
 ## License
 
