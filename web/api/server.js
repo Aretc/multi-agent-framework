@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Multi-Agent Framework Web API
+ * MeowTea Framework Web API
  * RESTful API server for dashboard
  */
 
@@ -9,8 +9,30 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const { Server } = require('socket.io');
 const { MultiAgentFramework } = require('../../core');
+
+const FRAMEWORK_ROOT = path.resolve(__dirname, '../..');
+
+function isPortAvailable(port) {
+  return new Promise(function(resolve) {
+    const tester = net.createServer()
+      .once('error', function() { resolve(false); })
+      .once('listening', function() { tester.once('close', function() { resolve(true); }).close(); })
+      .listen(port);
+  });
+}
+
+async function findAvailablePort(startPort, maxAttempts) {
+  maxAttempts = maxAttempts || 10;
+  for (let port = startPort; port < startPort + maxAttempts; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  return null;
+}
 
 function createApp(options) {
   options = options || {};
@@ -29,8 +51,8 @@ function createApp(options) {
   app.use(cors());
   app.use(express.json());
 
-  // Build path
-  const buildPath = path.join(__dirname, '../dashboard/build');
+  // Build path - use framework root for global access
+  const buildPath = path.join(FRAMEWORK_ROOT, 'web/dashboard/build');
   console.log('Static files path:', buildPath);
   
   if (require('fs').existsSync(buildPath)) {
@@ -44,8 +66,8 @@ function createApp(options) {
     res.json({
       success: true,
       data: {
-        name: 'Multi-Agent Framework',
-        version: '1.0.0',
+        name: 'MeowTea',
+        version: '1.5.0',
         status: 'running',
         uptime: process.uptime()
       }
@@ -779,19 +801,30 @@ function createApp(options) {
   return { app: app, server: server, io: io, framework: framework };
 }
 
-function startServer(port, rootDir) {
+async function startServer(port, rootDir) {
   port = port || 3000;
   rootDir = rootDir || process.cwd();
   
+  const availablePort = await findAvailablePort(port);
+  if (!availablePort) {
+    console.error('Error: Could not find an available port between ' + port + ' and ' + (port + 9));
+    console.error('Please specify a different port using --port=<number>');
+    process.exit(1);
+  }
+  
+  if (availablePort !== port) {
+    console.log('Port ' + port + ' is in use, using port ' + availablePort + ' instead...');
+  }
+  
   const { server, io, framework } = createApp({ rootDir: rootDir });
 
-  server.listen(port, function() {
+  server.listen(availablePort, function() {
     console.log('');
     console.log('╔════════════════════════════════════════════╗');
-    console.log('║   Multi-Agent Framework Dashboard          ║');
+    console.log('║           MeowTea Dashboard 🐱🍵           ║');
     console.log('╠════════════════════════════════════════════╣');
-    console.log('║   Web:  http://localhost:' + port + '              ║');
-    console.log('║   API:  http://localhost:' + port + '/api          ║');
+    console.log('║   Web:  http://localhost:' + availablePort + '              ║');
+    console.log('║   API:  http://localhost:' + availablePort + '/api          ║');
     console.log('╚════════════════════════════════════════════╝');
     console.log('');
     console.log('Press Ctrl+C to stop the server');
@@ -858,7 +891,11 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const portArg = args.find(function(arg) { return arg.startsWith('--port='); });
   const port = portArg ? parseInt(portArg.split('=')[1]) : (process.env.PORT || 3000);
-  startServer(port);
+  const rootDir = process.cwd();
+  startServer(port, rootDir).catch(function(err) {
+    console.error('Failed to start server:', err.message);
+    process.exit(1);
+  });
 }
 
-module.exports = { createApp: createApp, startServer: startServer };
+module.exports = { createApp: createApp, startServer: startServer, findAvailablePort: findAvailablePort, FRAMEWORK_ROOT: FRAMEWORK_ROOT };

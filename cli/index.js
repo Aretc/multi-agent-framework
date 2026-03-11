@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Multi-Agent Framework CLI
+ * MeowTea Framework CLI
  * Command-line interface for managing agents, tasks, messages, and workflows
  * 
  * New features:
@@ -15,6 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 const { MultiAgentFramework } = require('../core');
+const { startServer } = require('../web/api/server');
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -26,9 +27,13 @@ function getFramework() {
 
 function showHelp() {
   console.log('');
-  console.log('Multi-Agent Framework CLI');
+  console.log('╔════════════════════════════════════════════╗');
+  console.log('║           MeowTea Framework                ║');
+  console.log('║     🐱 Multi-Agent Collaboration 🍵        ║');
+  console.log('╚════════════════════════════════════════════╝');
   console.log('');
-  console.log('Usage: maf <command> [options]');
+  console.log('Usage: meowtea <command> [options]');
+  console.log('       mt <command> [options]');
   console.log('');
   console.log('Commands:');
   console.log('');
@@ -77,6 +82,10 @@ function showHelp() {
   console.log('');
   console.log('  Watch:');
   console.log('    watch                      Start file watcher for auto-notifications');
+  console.log('');
+  console.log('  Web Dashboard:');
+  console.log('    web [port]                 Start web dashboard server (default: 3000)');
+  console.log('    web --port=3001            Start on specific port');
   console.log('');
   console.log('  Memory:');
   console.log('    memory show <agent>        Show agent memory stats');
@@ -141,11 +150,12 @@ function showHelp() {
   console.log('  --interactive               Enable interactive mode');
   console.log('');
   console.log('Examples:');
-  console.log('  maf init default');
-  console.log('  maf ask "Create a REST API for user management"');
-  console.log('  maf ask "Research the latest AI trends and write a summary"');
-  console.log('  maf agent templates');
-  console.log('  maf session list');
+  console.log('  meowtea init default');
+  console.log('  meowtea ask "Create a REST API for user management"');
+  console.log('  meowtea ask "Research the latest AI trends and write a summary"');
+  console.log('  meowtea agent templates');
+  console.log('  meowtea session list');
+  console.log('  meowtea web              # Start web dashboard');
   console.log('');
 }
 
@@ -826,6 +836,32 @@ function startWatch() {
   
   checkChanges();
   setInterval(checkChanges, pollInterval);
+}
+
+async function startWebDashboard() {
+  let port = 3000;
+  
+  const portArg = args.find(function(arg) { return arg.startsWith('--port='); });
+  if (portArg) {
+    port = parseInt(portArg.split('=')[1]);
+  } else if (args[1] && !args[1].startsWith('-')) {
+    const parsed = parseInt(args[1]);
+    if (!isNaN(parsed)) {
+      port = parsed;
+    }
+  }
+  
+  const rootDir = process.cwd();
+  console.log('Starting web dashboard...');
+  console.log('Working directory: ' + rootDir);
+  console.log('');
+  
+  try {
+    await startServer(port, rootDir);
+  } catch (e) {
+    console.error('Failed to start server:', e.message);
+    process.exit(1);
+  }
 }
 
 async function showMemoryStats() {
@@ -1751,6 +1787,9 @@ switch (command) {
     break;
   case 'watch':
     startWatch();
+    break;
+  case 'web':
+    startWebDashboard();
     break;
   case 'memory':
     var subCmd = args[1];

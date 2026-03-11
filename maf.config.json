@@ -1,0 +1,76 @@
+{
+  "agents": [],
+  "workflows": {},
+  "messages": {
+    "types": [
+      "NOTIFICATION",
+      "REQUEST",
+      "RESPONSE",
+      "TASK_ASSIGN",
+      "TASK_UPDATE",
+      "TASK_COMPLETE",
+      "REVIEW_REQUEST",
+      "REVIEW_FEEDBACK",
+      "BUG_REPORT",
+      "DECISION",
+      "ESCALATION"
+    ],
+    "priorities": [
+      "P0",
+      "P1",
+      "P2",
+      "P3"
+    ]
+  },
+  "tasks": {
+    "statuses": [
+      "pending",
+      "assigned",
+      "in-progress",
+      "review",
+      "testing",
+      "done",
+      "blocked"
+    ],
+    "priorities": [
+      "P0",
+      "P1",
+      "P2",
+      "P3"
+    ]
+  },
+  "memory": {
+    "enabled": true,
+    "shortTerm": {
+      "maxSize": 100,
+      "maxAge": 3600000
+    },
+    "longTerm": {
+      "maxSize": 10000
+    },
+    "episodic": {
+      "maxEvents": 1000,
+      "retentionDays": 30
+    }
+  },
+  "llm": {
+    "enabled": false,
+    "provider": "mock",
+    "model": "default",
+    "baseUrl": null,
+    "apiKey": null,
+    "temperature": 0.7,
+    "maxTokens": 4096
+  },
+  "tools": {
+    "enabled": true,
+    "builtin": true,
+    "custom": []
+  },
+  "orchestrator": {
+    "enabled": true,
+    "maxRejectCount": 3,
+    "maxTaskRetries": 3,
+    "maxConcurrentAgents": 5
+  }
+}

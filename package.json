@@ -1,10 +1,11 @@
 {
-  "name": "multi-agent-framework",
+  "name": "meowtea",
   "version": "1.5.0",
-  "description": "A flexible multi-agent collaboration framework for AI-powered software development",
+  "description": "MeowTea - A flexible multi-agent collaboration framework for AI-powered software development",
   "main": "core/index.js",
   "bin": {
-    "maf": "./cli/index.js"
+    "meowtea": "./cli/index.js",
+    "mt": "./cli/index.js"
   },
   "scripts": {
     "init": "node cli/index.js init",

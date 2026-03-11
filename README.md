@@ -1,4 +1,4 @@
-# Multi-Agent Framework
+# MeowTea 🐱🍵
 
 A flexible, extensible framework for AI agent collaboration with intelligent task orchestration, session isolation, and a modern web dashboard.
 
@@ -61,9 +61,11 @@ npm link
 ### Start Dashboard
 
 ```bash
-# Start the web dashboard
-cd web/api
-node server.js
+# Start the web dashboard (from any directory after global install)
+meowtea web
+
+# Or with specific port
+meowtea web --port=8080
 
 # Open http://localhost:3000 in your browser
 ```
@@ -72,49 +74,49 @@ node server.js
 
 ```bash
 # Initialize a new project
-maf init default
+meowtea init default
 
 # Ask the orchestrator
-maf ask "Create a REST API for user management"
+meowtea ask "Create a REST API for user management"
 
 # Provide clarification
-maf clarify "Users need authentication; Use JWT tokens"
+meowtea clarify "Users need authentication; Use JWT tokens"
 
 # Check status
-maf status
+meowtea status
 
 # Manage agents
-maf agent list
-maf agent create coder --name "API Developer"
-maf agent templates
+meowtea agent list
+meowtea agent create coder --name "API Developer"
+meowtea agent templates
 
 # Manage sessions
-maf session list
-maf session show <id>
-maf session close <id>
+meowtea session list
+meowtea session show <id>
+meowtea session close <id>
 
 # Manage tools
-maf tool list
-maf tool enable <name>
-maf tool disable <name>
+meowtea tool list
+meowtea tool enable <name>
+meowtea tool disable <name>
 
 # Manage skills
-maf skill list
-maf skill install <name> --template code
+meowtea skill list
+meowtea skill install <name> --template code
 
 # Manage rules
-maf rule list
-maf rule add <name> --type validation
+meowtea rule list
+meowtea rule add <name> --type validation
 
 # Manage MCP
-maf mcp list
-maf mcp connect <name> --command "npx @modelcontextprotocol/server-filesystem"
+meowtea mcp list
+meowtea mcp connect <name> --command "npx @modelcontextprotocol/server-filesystem"
 ```
 
 ## Project Structure
 
 ```
-multi-agent-framework/
+meowtea/
 ├── cli/                    # CLI commands
 │   └── index.js           # Main CLI entry
 ├── core/                   # Core framework
@@ -134,13 +136,13 @@ multi-agent-framework/
 │   └── dashboard/         # React dashboard
 │       └── src/
 │           └── index.js   # Dashboard UI
-├── maf.config.json        # Configuration
+├── meowtea.config.json    # Configuration
 └── package.json
 ```
 
 ## Configuration
 
-### maf.config.json
+### meowtea.config.json
 
 ```json
 {

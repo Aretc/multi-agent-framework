@@ -1,4 +1,4 @@
-# Multi-Agent Framework
+# MeowTea 🐱🍵
 
 一个灵活、可扩展的 AI 智能体协作框架，具有智能任务编排、会话隔离和现代化 Web 控制面板。
 
@@ -61,9 +61,11 @@ npm link
 ### 启动控制面板
 
 ```bash
-# 启动 Web 控制面板
-cd web/api
-node server.js
+# 启动 Web 控制面板（全局安装后可在任意目录运行）
+meowtea web
+
+# 或指定端口
+meowtea web --port=8080
 
 # 在浏览器中打开 http://localhost:3000
 ```
@@ -72,49 +74,49 @@ node server.js
 
 ```bash
 # 初始化新项目
-maf init default
+meowtea init default
 
 # 向编排器发送指令
-maf ask "创建用户管理的 REST API"
+meowtea ask "创建用户管理的 REST API"
 
 # 提供澄清信息
-maf clarify "用户需要认证；使用 JWT 令牌"
+meowtea clarify "用户需要认证；使用 JWT 令牌"
 
 # 查看状态
-maf status
+meowtea status
 
 # 管理智能体
-maf agent list
-maf agent create coder --name "API 开发者"
-maf agent templates
+meowtea agent list
+meowtea agent create coder --name "API 开发者"
+meowtea agent templates
 
 # 管理会话
-maf session list
-maf session show <id>
-maf session close <id>
+meowtea session list
+meowtea session show <id>
+meowtea session close <id>
 
 # 管理工具
-maf tool list
-maf tool enable <name>
-maf tool disable <name>
+meowtea tool list
+meowtea tool enable <name>
+meowtea tool disable <name>
 
 # 管理技能
-maf skill list
-maf skill install <name> --template code
+meowtea skill list
+meowtea skill install <name> --template code
 
 # 管理规则
-maf rule list
-maf rule add <name> --type validation
+meowtea rule list
+meowtea rule add <name> --type validation
 
 # 管理 MCP
-maf mcp list
-maf mcp connect <name> --command "npx @modelcontextprotocol/server-filesystem"
+meowtea mcp list
+meowtea mcp connect <name> --command "npx @modelcontextprotocol/server-filesystem"
 ```
 
 ## 项目结构
 
 ```
-multi-agent-framework/
+meowtea/
 ├── cli/                    # CLI 命令
 │   └── index.js           # CLI 入口
 ├── core/                   # 核心框架
@@ -134,13 +136,13 @@ multi-agent-framework/
 │   └── dashboard/         # React 控制面板
 │       └── src/
 │           └── index.js   # Dashboard UI
-├── maf.config.json        # 配置文件
+├── meowtea.config.json    # 配置文件
 └── package.json
 ```
 
 ## 配置
 
-### maf.config.json
+### meowtea.config.json
 
 ```json
 {
