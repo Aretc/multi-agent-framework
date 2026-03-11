@@ -14,6 +14,7 @@ const { SessionManager, Session, SESSION_STATUS } = require('./session');
 const { DynamicAgentFactory, DynamicAgent, AGENT_TYPES } = require('./dynamic-agent');
 const { createLLMAdapter } = require('./llm/adapter');
 const { AgentMemory } = require('./memory');
+const { createExternalToolManager } = require('./external-tools');
 
 const ORCHESTRATOR_STATUS = {
   IDLE: 'idle',
@@ -40,6 +41,11 @@ const DEFAULT_ORCHESTRATOR_CONFIG = {
   maxTaskRetries: 3,
   maxConcurrentAgents: 5,
   autoSave: true,
+  delegate: {
+    enabled: false,
+    tool: 'trae',
+    fallbackToInternal: true
+  },
   llm: {
     provider: 'mock',
     model: 'default',
@@ -254,6 +260,8 @@ class Orchestrator {
     this.completedTasks = [];
     this.clarificationCallback = null;
     
+    this.externalToolManager = null;
+    
     this.eventHandlers = {
       'task_created': [],
       'task_assigned': [],
@@ -261,7 +269,8 @@ class Orchestrator {
       'task_rejected': [],
       'agent_created': [],
       'clarification_needed': [],
-      'session_completed': []
+      'session_completed': [],
+      'delegated_to_external_tool': []
     };
   }
 
@@ -273,7 +282,26 @@ class Orchestrator {
       });
       await this.memory.init();
     }
+    
+    if (this.config.delegate && this.config.delegate.enabled) {
+      const { createExternalToolManager } = require('./external-tools');
+      this.externalToolManager = createExternalToolManager();
+      this.externalToolManager.registerTool({ type: this.config.delegate.tool || 'trae' });
+    }
+    
     return this;
+  }
+
+  setExternalToolManager(manager) {
+    this.externalToolManager = manager;
+  }
+  
+  getExternalToolManager() {
+    return this.externalToolManager;
+  }
+  
+  isDelegateEnabled() {
+    return this.config.delegate && this.config.delegate.enabled !== false;
   }
 
   on(event, handler) {
@@ -337,6 +365,10 @@ class Orchestrator {
       });
     }
     
+    if (this.isDelegateEnabled()) {
+      return await this.delegateToExternalTool(userInput, context);
+    }
+    
     const plan = await this._planTasks(userInput, context);
     
     if (plan.needsClarification) {
@@ -366,15 +398,72 @@ class Orchestrator {
     
     this.currentSession.setTaskPlan(plan);
     
+    const self = this;
     plan.tasks.forEach(function(taskData) {
       const task = new Task(taskData);
-      this.tasks.set(task.id, task);
-      this.emit('task_created', task);
-    }.bind(this));
+      self.tasks.set(task.id, task);
+      self.emit('task_created', task);
+    });
     
-    this._buildExecutionQueue(plan.executionOrder);
+    self._buildExecutionQueue(plan.executionOrder);
     
-    return await this._executePlan();
+    return await self._executePlan();
+  }
+
+  async delegateToExternalTool(userInput, context) {
+    const self = this;
+    
+    if (!this.externalToolManager) {
+      const { createExternalToolManager } = require('./external-tools');
+      this.externalToolManager = createExternalToolManager();
+      this.externalToolManager.registerTool({ type: this.config.delegate.tool || 'trae' });
+    }
+    
+    this.emit('delegation_started', {
+      tool: this.config.delegate.tool || 'trae',
+      input: userInput,
+      context: context
+    });
+    
+    const result = await this.externalToolManager.executeTask('trae', {
+      prompt: userInput,
+      context: context
+    });
+    
+    this.emit('delegation_completed', {
+      tool: 'trae',
+      result: result
+    });
+    
+    const task = new Task({
+      id: 'delegated_task',
+      title: 'Delegated to external tool',
+      description: 'Executed via ' + (this.config.delegate.tool || 'trae'),
+      type: 'delegated',
+      status: TASK_STATUS.COMPLETED,
+      result: result
+    });
+    
+    this.tasks.set(task.id, task);
+    this.completedTasks.push(task);
+    this.currentSession.complete({ results: [result] });
+    
+    this.status = ORCHESTRATOR_STATUS.COMPLETED;
+    
+    this.emit('session_completed', {
+      sessionId: this.currentSession.id,
+      results: [result],
+      delegated: true,
+      tool: this.config.delegate.tool || 'trae'
+    });
+    
+    return {
+      delegated: true,
+      tool: this.config.delegate.tool || 'trae',
+      result: result,
+      sessionId: this.currentSession.id,
+      tasks: [task.toJSON()]
+    };
   }
 
   async provideClarification(sessionId, responses) {
@@ -419,13 +508,13 @@ class Orchestrator {
     let prompt = PLANNING_PROMPT.replace('{userInput}', userInput);
     
     let contextStr = '';
-    if (context.clarificationResponses && context.clarificationResponses.length > 0) {
+    if (context && context.clarificationResponses && context.clarificationResponses.length > 0) {
       contextStr = 'Clarification provided:\n';
       context.clarificationResponses.forEach(function(r, i) {
         contextStr += (i + 1) + '. ' + r + '\n';
       });
     }
-    if (context.previousResults && context.previousResults.length > 0) {
+    if (context && context.previousResults && context.previousResults.length > 0) {
       contextStr += '\nPrevious task results:\n';
       context.previousResults.forEach(function(r, i) {
         contextStr += (i + 1) + '. ' + r.taskId + ': ' + r.summary + '\n';
