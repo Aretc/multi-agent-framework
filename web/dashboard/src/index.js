@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import io from 'socket.io-client';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_BASE = '/api';
 const socket = io();
@@ -213,6 +215,7 @@ const styles = {
   chatInputArea: { padding: '12px 16px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '12px', alignItems: 'flex-end' },
   chatInput: { flex: 1, padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '14px', resize: 'none', minHeight: '44px', maxHeight: '120px', fontFamily: 'inherit' },
   chatSendBtn: { padding: '12px 20px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg, #00d9ff 0%, #00b4d8 100%)', color: '#0f0f1a', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s' },
+  markdownContent: { lineHeight: '1.6' },
 };
 
 const statusColors = { active: '#2ed573', completed: '#00d9ff', pending: '#ffa502', failed: '#ff4757', idle: '#666', busy: '#ffa502', ready: '#2ed573', registered: '#2ed573', disabled: '#666', open: '#2ed573', closed: '#666' };
@@ -561,7 +564,9 @@ function App() {
                 ...(msg.role === 'user' ? styles.chatMessageUser : 
                     msg.role === 'system' ? styles.chatMessageSystem : styles.chatMessageAI)
               }}>
-                <div>{msg.content}</div>
+                <div className="markdown-content">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                </div>
                 {msg.model && (
                   <div style={styles.chatInfo}>
                     {t.llmChatModel}: {msg.model} | {t.llmChatTokens}: {msg.tokens?.input_tokens || 0} in / {msg.tokens?.output_tokens || 0} out

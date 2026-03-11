@@ -21,6 +21,7 @@ const { AgentRuntime } = require('./agent');
 const { SessionManager, Session, SESSION_STATUS } = require('./session');
 const { DynamicAgentFactory, DynamicAgent, AGENT_TYPES, AGENT_TEMPLATES } = require('./dynamic-agent');
 const { Orchestrator, Task, ORCHESTRATOR_STATUS, TASK_STATUS } = require('./orchestrator');
+const { injectWorkflowContext } = require('./workflow-prompt');
 
 const DEFAULT_CONFIG = {
   agents: [],
@@ -62,6 +63,10 @@ const DEFAULT_CONFIG = {
     maxRejectCount: 3,
     maxTaskRetries: 3,
     maxConcurrentAgents: 5
+  },
+  workflowPrompt: {
+    enabled: true,
+    detailed: false
   }
 };
 
@@ -708,6 +713,13 @@ class MultiAgentFramework {
     options = options || {};
     const llm = this.createLLM(options.llm || {});
     
+    const workflowPromptConfig = this.config.workflowPrompt || {};
+    if (workflowPromptConfig.enabled !== false && !options.skipWorkflowContext) {
+      messages = injectWorkflowContext(messages, {
+        detailed: workflowPromptConfig.detailed || options.detailedWorkflowPrompt
+      });
+    }
+    
     if (this.memory && options.includeContext) {
       const context = await this.getAgentContext(agentName, 5);
       if (context && context.recentMemory && context.recentMemory.length > 0) {
@@ -746,6 +758,13 @@ class MultiAgentFramework {
   async streamChat(agentName, messages, onChunk, options) {
     options = options || {};
     const llm = this.createLLM(options.llm || {});
+    
+    const workflowPromptConfig = this.config.workflowPrompt || {};
+    if (workflowPromptConfig.enabled !== false && !options.skipWorkflowContext) {
+      messages = injectWorkflowContext(messages, {
+        detailed: workflowPromptConfig.detailed || options.detailedWorkflowPrompt
+      });
+    }
     
     const context = this.buildAgentContext(agentName);
     if (context) {
