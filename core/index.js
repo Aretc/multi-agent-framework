@@ -1,7 +1,12 @@
 /**
  * Multi-Agent Framework Core
  * 
- * A flexible framework for AI agent collaboration
+ * A flexible framework for AI agent collaboration with:
+ * - Dynamic agent creation based on task requirements
+ * - Session isolation to prevent memory pollution
+ * - Intelligent task planning and decomposition
+ * - Task validation and rejection handling
+ * - Automatic clarification requests
  */
 
 const path = require('path');
@@ -10,6 +15,9 @@ const { MemoryManager, AgentMemory } = require('./memory');
 const { createLLMAdapter } = require('./llm/adapter');
 const { ToolManager } = require('./tools');
 const { AgentRuntime } = require('./agent');
+const { SessionManager, Session, SESSION_STATUS } = require('./session');
+const { DynamicAgentFactory, DynamicAgent, AGENT_TYPES, AGENT_TEMPLATES } = require('./dynamic-agent');
+const { Orchestrator, Task, ORCHESTRATOR_STATUS, TASK_STATUS } = require('./orchestrator');
 
 const DEFAULT_CONFIG = {
   agents: [],
@@ -45,6 +53,12 @@ const DEFAULT_CONFIG = {
     enabled: true,
     builtin: true,
     custom: []
+  },
+  orchestrator: {
+    enabled: true,
+    maxRejectCount: 3,
+    maxTaskRetries: 3,
+    maxConcurrentAgents: 5
   }
 };
 
@@ -60,7 +74,6 @@ class MultiAgentFramework {
     this.workflows = new Map();
     this.agentRuntimes = new Map();
     
-    // Initialize memory system
     if (this.config.memory && this.config.memory.enabled) {
       this.memoryManager = new MemoryManager({
         rootPath: path.join(this.rootDir, '.maf', 'memory'),
@@ -68,15 +81,31 @@ class MultiAgentFramework {
       });
     }
     
-    // Initialize LLM
     if (this.config.llm && this.config.llm.enabled) {
       this.llm = createLLMAdapter(this.config.llm);
     }
     
-    // Initialize Tools
     if (this.config.tools && this.config.tools.enabled) {
       this.toolManager = new ToolManager();
     }
+    
+    if (this.config.orchestrator && this.config.orchestrator.enabled) {
+      this.orchestrator = new Orchestrator({
+        ...this.config.orchestrator,
+        llm: this.config.llm,
+        sessionRootPath: path.join(this.rootDir, '.maf', 'sessions'),
+        agentMemoryRootPath: path.join(this.rootDir, '.maf', 'agents')
+      });
+    }
+    
+    this.sessionManager = new SessionManager({
+      rootPath: path.join(this.rootDir, '.maf', 'sessions')
+    });
+    
+    this.agentFactory = new DynamicAgentFactory({
+      llm: this.config.llm,
+      memoryRootPath: path.join(this.rootDir, '.maf', 'agents')
+    });
   }
 
   loadConfig() {
@@ -107,7 +136,10 @@ class MultiAgentFramework {
       'messages/direct',
       'messages/archive',
       'docs',
-      '.maf'
+      '.maf',
+      '.maf/sessions',
+      '.maf/agents',
+      '.maf/orchestrator'
     ];
 
     dirs.forEach(function(dir) {
@@ -576,10 +608,8 @@ class MultiAgentFramework {
     if (!memory) return null;
     await memory.init();
     
-    // Add to short-term memory
     memory.remember(content, metadata);
     
-    // Record as episodic event
     await memory.recordEvent({
       type: 'memory_add',
       action: 'Added to short-term memory',
@@ -594,10 +624,8 @@ class MultiAgentFramework {
     if (!memory) return null;
     await memory.init();
     
-    // Add to long-term memory
     const item = await memory.memorize(content, metadata);
     
-    // Record as episodic event
     await memory.recordEvent({
       type: 'memory_persist',
       action: 'Added to long-term memory',
@@ -651,7 +679,6 @@ class MultiAgentFramework {
     options = options || {};
     const llm = this.createLLM(options.llm || {});
     
-    // Add context from memory if available
     if (this.memory && options.includeContext) {
       const context = await this.getAgentContext(agentName, 5);
       if (context && context.recentMemory && context.recentMemory.length > 0) {
@@ -664,7 +691,6 @@ class MultiAgentFramework {
     
     const response = await llm.chat(messages, options);
     
-    // Record in memory
     if (this.memory) {
       const memory = this.getAgentMemory(agentName);
       if (memory) {
@@ -758,6 +784,140 @@ class MultiAgentFramework {
     
     return await runtime.run(input);
   }
+
+  // ========== NEW DYNAMIC AGENT METHODS ==========
+
+  async processUserInput(userInput, context) {
+    if (!this.orchestrator) {
+      this.orchestrator = new Orchestrator({
+        ...this.config.orchestrator,
+        llm: this.config.llm,
+        sessionRootPath: path.join(this.rootDir, '.maf', 'sessions'),
+        agentMemoryRootPath: path.join(this.rootDir, '.maf', 'agents')
+      });
+      await this.orchestrator.initialize();
+    }
+    
+    return await this.orchestrator.processUserInput(userInput, context);
+  }
+
+  async provideClarification(sessionId, responses) {
+    if (!this.orchestrator) {
+      return { error: 'No active orchestrator session' };
+    }
+    return await this.orchestrator.provideClarification(sessionId, responses);
+  }
+
+  async provideTaskClarification(taskId, responses) {
+    if (!this.orchestrator) {
+      return { error: 'No active orchestrator session' };
+    }
+    return await this.orchestrator.provideTaskClarification(taskId, responses);
+  }
+
+  setClarificationCallback(callback) {
+    if (this.orchestrator) {
+      this.orchestrator.setClarificationCallback(callback);
+    }
+    return this;
+  }
+
+  onOrchestratorEvent(event, handler) {
+    if (this.orchestrator) {
+      this.orchestrator.on(event, handler);
+    }
+    return this;
+  }
+
+  getOrchestratorStatus() {
+    return this.orchestrator ? this.orchestrator.getStatus() : null;
+  }
+
+  getOrchestratorTask(taskId) {
+    return this.orchestrator ? this.orchestrator.getTask(taskId) : null;
+  }
+
+  getAllOrchestratorTasks() {
+    return this.orchestrator ? this.orchestrator.getAllTasks() : [];
+  }
+
+  async pauseOrchestrator() {
+    if (this.orchestrator) {
+      await this.orchestrator.pause();
+    }
+    return this;
+  }
+
+  async resumeOrchestrator() {
+    if (this.orchestrator) {
+      await this.orchestrator.resume();
+    }
+    return this;
+  }
+
+  async cancelOrchestrator() {
+    if (this.orchestrator) {
+      await this.orchestrator.cancel();
+    }
+    return this;
+  }
+
+  async createDynamicAgent(options) {
+    return await this.agentFactory.createAgent(options);
+  }
+
+  async createDynamicAgentForTask(task) {
+    return await this.agentFactory.createAgentForTask(task);
+  }
+
+  getDynamicAgent(agentId) {
+    return this.agentFactory.getAgent(agentId);
+  }
+
+  listDynamicAgents() {
+    return this.agentFactory.listAgents();
+  }
+
+  async removeDynamicAgent(agentId) {
+    return await this.agentFactory.removeAgent(agentId);
+  }
+
+  getAgentTemplates() {
+    return this.agentFactory.listTemplates();
+  }
+
+  getAgentTemplate(type) {
+    return this.agentFactory.getTemplate(type);
+  }
+
+  // Session Management Methods
+  createSession(options) {
+    return this.sessionManager.createSession(options);
+  }
+
+  async getSession(sessionId) {
+    return await this.sessionManager.getSession(sessionId);
+  }
+
+  async initializeSession(sessionId, options) {
+    return await this.sessionManager.initializeSession(sessionId, options);
+  }
+
+  async closeSession(sessionId) {
+    return await this.sessionManager.closeSession(sessionId);
+  }
+
+  async deleteSession(sessionId) {
+    return await this.sessionManager.deleteSession(sessionId);
+  }
+
+  listSessions() {
+    return this.sessionManager.listSessions();
+  }
+
+  getActiveSessions() {
+    return this.sessionManager.getActiveSessions();
+  }
 }
 
 module.exports = { 
@@ -767,5 +927,16 @@ module.exports = {
   AgentMemory: require('./memory').AgentMemory,
   createLLMAdapter: require('./llm/adapter').createLLMAdapter,
   ToolManager: require('./tools').ToolManager,
-  AgentRuntime: require('./agent').AgentRuntime
+  AgentRuntime: require('./agent').AgentRuntime,
+  SessionManager: require('./session').SessionManager,
+  Session: require('./session').Session,
+  SESSION_STATUS: require('./session').SESSION_STATUS,
+  DynamicAgentFactory: require('./dynamic-agent').DynamicAgentFactory,
+  DynamicAgent: require('./dynamic-agent').DynamicAgent,
+  AGENT_TYPES: require('./dynamic-agent').AGENT_TYPES,
+  AGENT_TEMPLATES: require('./dynamic-agent').AGENT_TEMPLATES,
+  Orchestrator: require('./orchestrator').Orchestrator,
+  Task: require('./orchestrator').Task,
+  ORCHESTRATOR_STATUS: require('./orchestrator').ORCHESTRATOR_STATUS,
+  TASK_STATUS: require('./orchestrator').TASK_STATUS
 };

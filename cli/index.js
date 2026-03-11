@@ -3,10 +3,17 @@
 /**
  * Multi-Agent Framework CLI
  * Command-line interface for managing agents, tasks, messages, and workflows
+ * 
+ * New features:
+ * - Interactive mode for user input processing
+ * - Dynamic agent creation and management
+ * - Session management
+ * - Clarification handling
  */
 
 const path = require('path');
 const fs = require('fs');
+const readline = require('readline');
 const { MultiAgentFramework } = require('../core');
 
 const args = process.argv.slice(2);
@@ -29,10 +36,27 @@ function showHelp() {
   console.log('    init [preset]              Initialize a new project (default|minimal|none)');
   console.log('    config                     Show current configuration');
   console.log('');
-  console.log('  Agents:');
-  console.log('    agent list                 List all agents');
-  console.log('    agent add <name>           Add a new agent');
-  console.log('    agent show <name>          Show agent details');
+  console.log('  Interactive (New):');
+  console.log('    ask "<instruction>"        Process user instruction with dynamic agents');
+  console.log('    clarify <sessionId>        Provide clarification for a session');
+  console.log('    status                     Show orchestrator status');
+  console.log('    tasks                      List all orchestrator tasks');
+  console.log('    pause                      Pause current execution');
+  console.log('    resume                     Resume paused execution');
+  console.log('    cancel                     Cancel current execution');
+  console.log('');
+  console.log('  Dynamic Agents (New):');
+  console.log('    agent create <type>        Create a dynamic agent by type');
+  console.log('    agent list                 List all agents (static + dynamic)');
+  console.log('    agent show <name|id>       Show agent details');
+  console.log('    agent templates            List available agent templates');
+  console.log('    agent remove <id>          Remove a dynamic agent');
+  console.log('');
+  console.log('  Sessions (New):');
+  console.log('    session list               List all sessions');
+  console.log('    session show <id>          Show session details');
+  console.log('    session close <id>         Close a session');
+  console.log('    session delete <id>        Delete a session');
   console.log('');
   console.log('  Tasks:');
   console.log('    task create <title>        Create a new task');
@@ -78,13 +102,14 @@ function showHelp() {
   console.log('  --assignee <agent>          Set assignee');
   console.log('  --type <type>               Set message type');
   console.log('  --file <path>               Use config file');
+  console.log('  --interactive               Enable interactive mode');
   console.log('');
   console.log('Examples:');
   console.log('  maf init default');
-  console.log('  maf task create "Implement feature X" --priority P1');
-  console.log('  maf task assign TASK-001 Developer');
-  console.log('  maf workflow transfer TASK-001 Developer Reviewer');
-  console.log('  maf memory remember Developer "Working on login feature"');
+  console.log('  maf ask "Create a REST API for user management"');
+  console.log('  maf ask "Research the latest AI trends and write a summary"');
+  console.log('  maf agent templates');
+  console.log('  maf session list');
   console.log('');
 }
 
@@ -106,15 +131,108 @@ function showConfig() {
 
 function listAgents() {
   const framework = getFramework();
-  const agents = framework.listAgents();
-  console.log('\n=== Agents ===\n');
-  if (agents.length === 0) {
-    console.log('No agents configured. Run "maf init" to set up a project.');
+  const staticAgents = framework.listAgents();
+  const dynamicAgents = framework.listDynamicAgents();
+  
+  console.log('\n=== Static Agents ===\n');
+  if (staticAgents.length === 0) {
+    console.log('No static agents configured. Run "maf init" to set up a project.');
+  } else {
+    staticAgents.forEach(function(agent) {
+      console.log('- ' + agent.name + ': ' + agent.description);
+    });
+  }
+  
+  console.log('\n=== Dynamic Agents ===\n');
+  if (dynamicAgents.length === 0) {
+    console.log('No dynamic agents created.');
+  } else {
+    dynamicAgents.forEach(function(agent) {
+      console.log('- [' + agent.id + '] ' + agent.name + ' (' + agent.type + '): ' + agent.status);
+    });
+  }
+}
+
+function showAgentTemplates() {
+  const framework = getFramework();
+  const templates = framework.getAgentTemplates();
+  
+  console.log('\n=== Agent Templates ===\n');
+  templates.forEach(function(template) {
+    console.log('[' + template.type + '] ' + template.name);
+    console.log('  ' + template.description);
+    console.log('  Capabilities: ' + template.capabilities.join(', '));
+    console.log('');
+  });
+}
+
+async function createDynamicAgent() {
+  const type = args[2];
+  if (!type) {
+    console.log('Usage: maf agent create <type>');
+    console.log('Available types: general, coder, researcher, writer, analyzer, tester, reviewer, designer, planner, coordinator');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const agent = await framework.createDynamicAgent({ type: type });
+  
+  console.log('Created dynamic agent:');
+  console.log('  ID: ' + agent.id);
+  console.log('  Name: ' + agent.name);
+  console.log('  Type: ' + agent.type);
+  console.log('  Description: ' + agent.description);
+}
+
+function showAgent() {
+  const nameOrId = args[2];
+  if (!nameOrId) {
+    console.log('Usage: maf agent show <name|id>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  const staticAgent = framework.getAgent(nameOrId);
+  if (staticAgent) {
+    console.log('\n=== Static Agent: ' + staticAgent.name + ' ===\n');
+    console.log('Description: ' + staticAgent.description);
+    console.log('Responsibilities: ' + (staticAgent.responsibilities || []).join(', '));
+    console.log('Outputs: ' + (staticAgent.outputs || []).join(', '));
     return;
   }
-  agents.forEach(function(agent) {
-    console.log('- ' + agent.name + ': ' + agent.description);
-  });
+  
+  const dynamicAgent = framework.getDynamicAgent(nameOrId);
+  if (dynamicAgent) {
+    const stats = dynamicAgent.getStats();
+    console.log('\n=== Dynamic Agent: ' + stats.name + ' ===\n');
+    console.log('ID: ' + stats.id);
+    console.log('Type: ' + stats.type);
+    console.log('Status: ' + stats.status);
+    console.log('Task Count: ' + stats.taskCount);
+    console.log('Reject Count: ' + stats.rejectCount);
+    console.log('Created: ' + stats.createdAt);
+    return;
+  }
+  
+  console.log('Agent not found: ' + nameOrId);
+}
+
+async function removeDynamicAgent() {
+  const agentId = args[2];
+  if (!agentId) {
+    console.log('Usage: maf agent remove <id>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const removed = await framework.removeDynamicAgent(agentId);
+  
+  if (removed) {
+    console.log('Removed dynamic agent: ' + agentId);
+  } else {
+    console.log('Agent not found: ' + agentId);
+  }
 }
 
 function addAgent() {
@@ -136,22 +254,271 @@ function addAgent() {
   console.log('Agent created: ' + name);
 }
 
-function showAgent() {
-  const name = args[2];
-  if (!name) {
-    console.log('Usage: maf agent show <name>');
+async function processUserInstruction() {
+  const instruction = args[1];
+  if (!instruction) {
+    console.log('Usage: maf ask "<instruction>"');
     process.exit(1);
   }
+  
   const framework = getFramework();
-  const agent = framework.getAgent(name);
-  if (!agent) {
-    console.log('Agent not found: ' + name);
+  
+  console.log('\n=== Processing Instruction ===\n');
+  console.log('Instruction: ' + instruction);
+  console.log('');
+  
+  framework.setClarificationCallback(function(data) {
+    console.log('\n=== Clarification Needed ===\n');
+    console.log('Understanding: ' + data.understanding);
+    console.log('\nQuestions:');
+    data.questions.forEach(function(q, i) {
+      console.log('  ' + (i + 1) + '. ' + q);
+    });
+    console.log('\nSession ID: ' + data.sessionId);
+    console.log('\nUse: maf clarify ' + data.sessionId + ' "your responses..."');
+  });
+  
+  framework.onOrchestratorEvent('task_created', function(task) {
+    console.log('[Task Created] ' + task.id + ': ' + task.title);
+  });
+  
+  framework.onOrchestratorEvent('task_assigned', function(task) {
+    console.log('[Task Assigned] ' + task.id + ' -> ' + task.assignedAgentName);
+  });
+  
+  framework.onOrchestratorEvent('task_completed', function(task) {
+    console.log('[Task Completed] ' + task.id);
+  });
+  
+  framework.onOrchestratorEvent('task_rejected', function(task) {
+    console.log('[Task Rejected] ' + task.id + ' (reject count: ' + task.rejectCount + ')');
+  });
+  
+  framework.onOrchestratorEvent('agent_created', function(agent) {
+    console.log('[Agent Created] ' + agent.name);
+  });
+  
+  framework.onOrchestratorEvent('session_completed', function(data) {
+    console.log('\n=== Session Completed ===\n');
+    console.log('Session ID: ' + data.sessionId);
+  });
+  
+  try {
+    const result = await framework.processUserInput(instruction);
+    
+    if (result.needsClarification) {
+      return;
+    }
+    
+    console.log('\n=== Result ===\n');
+    if (result.success) {
+      console.log('Status: Success');
+      console.log('Session ID: ' + result.sessionId);
+      console.log('\nTask Results:');
+      result.results.forEach(function(r, i) {
+        console.log('  ' + (i + 1) + '. ' + r.taskId + ': ' + (r.success ? 'Completed' : 'Failed'));
+      });
+    } else {
+      console.log('Status: Failed');
+      console.log('Error: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+async function provideClarification() {
+  const sessionId = args[1];
+  const responses = args[2];
+  
+  if (!sessionId || !responses) {
+    console.log('Usage: maf clarify <sessionId> "<responses>"');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  const responseList = responses.split(';').map(function(r) { return r.trim(); });
+  
+  console.log('\n=== Providing Clarification ===\n');
+  console.log('Session: ' + sessionId);
+  console.log('Responses: ' + responseList.join(', '));
+  console.log('');
+  
+  try {
+    const result = await framework.provideClarification(sessionId, responseList);
+    
+    if (result.needsClarification) {
+      console.log('\n=== Additional Clarification Needed ===\n');
+      result.questions.forEach(function(q, i) {
+        console.log('  ' + (i + 1) + '. ' + q);
+      });
+      return;
+    }
+    
+    console.log('\n=== Result ===\n');
+    if (result.success) {
+      console.log('Status: Success');
+      console.log('Session ID: ' + result.sessionId);
+    } else {
+      console.log('Status: Failed');
+      console.log('Error: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+function showOrchestratorStatus() {
+  const framework = getFramework();
+  const status = framework.getOrchestratorStatus();
+  
+  if (!status) {
+    console.log('No active orchestrator session.');
     return;
   }
-  console.log('\n=== Agent: ' + agent.name + ' ===\n');
-  console.log('Description: ' + agent.description);
-  console.log('Responsibilities: ' + (agent.responsibilities || []).join(', '));
-  console.log('Outputs: ' + (agent.outputs || []).join(', '));
+  
+  console.log('\n=== Orchestrator Status ===\n');
+  console.log('Status: ' + status.status);
+  console.log('Session ID: ' + (status.sessionId || 'None'));
+  console.log('Total Tasks: ' + status.totalTasks);
+  console.log('Completed Tasks: ' + status.completedTasks);
+  console.log('Pending Tasks: ' + status.pendingTasks);
+  console.log('Active Agents: ' + status.activeAgents);
+}
+
+function listOrchestratorTasks() {
+  const framework = getFramework();
+  const tasks = framework.getAllOrchestratorTasks();
+  
+  console.log('\n=== Orchestrator Tasks ===\n');
+  
+  if (tasks.length === 0) {
+    console.log('No tasks found.');
+    return;
+  }
+  
+  tasks.forEach(function(task) {
+    const statusIcon = {
+      'pending': '⏳',
+      'assigned': '👤',
+      'in_progress': '🔄',
+      'completed': '✅',
+      'rejected': '❌',
+      'failed': '💥',
+      'needs_clarification': '❓'
+    }[task.status] || '❔';
+    
+    console.log(statusIcon + ' [' + task.id + '] ' + task.title);
+    console.log('   Status: ' + task.status);
+    if (task.assignedAgentName) {
+      console.log('   Agent: ' + task.assignedAgentName);
+    }
+    if (task.rejectCount > 0) {
+      console.log('   Reject Count: ' + task.rejectCount);
+    }
+    console.log('');
+  });
+}
+
+async function pauseOrchestrator() {
+  const framework = getFramework();
+  await framework.pauseOrchestrator();
+  console.log('Orchestrator paused.');
+}
+
+async function resumeOrchestrator() {
+  const framework = getFramework();
+  await framework.resumeOrchestrator();
+  console.log('Orchestrator resumed.');
+}
+
+async function cancelOrchestrator() {
+  const framework = getFramework();
+  await framework.cancelOrchestrator();
+  console.log('Orchestrator cancelled.');
+}
+
+function listSessions() {
+  const framework = getFramework();
+  const sessions = framework.listSessions();
+  
+  console.log('\n=== Sessions ===\n');
+  
+  if (sessions.length === 0) {
+    console.log('No sessions found.');
+    return;
+  }
+  
+  sessions.forEach(function(session) {
+    console.log('[' + session.id + '] ' + session.status);
+    console.log('   Created: ' + session.createdAt);
+    console.log('   Updated: ' + session.updatedAt);
+    console.log('');
+  });
+}
+
+async function showSession() {
+  const sessionId = args[2];
+  if (!sessionId) {
+    console.log('Usage: maf session show <id>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const session = await framework.getSession(sessionId);
+  
+  if (!session) {
+    console.log('Session not found: ' + sessionId);
+    return;
+  }
+  
+  const stats = session.getStats();
+  
+  console.log('\n=== Session: ' + stats.id + ' ===\n');
+  console.log('Status: ' + stats.status);
+  console.log('Created: ' + stats.createdAt);
+  console.log('Updated: ' + stats.updatedAt);
+  console.log('Tasks: ' + stats.completedTasks + '/' + stats.taskCount);
+  console.log('Current Task Index: ' + stats.currentTaskIndex);
+  console.log('Messages: ' + stats.messageCount);
+  console.log('Agents: ' + stats.agentCount);
+  console.log('History Size: ' + stats.historySize);
+  console.log('Snapshots: ' + stats.snapshotCount);
+}
+
+async function closeSession() {
+  const sessionId = args[2];
+  if (!sessionId) {
+    console.log('Usage: maf session close <id>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const result = await framework.closeSession(sessionId);
+  
+  if (result.success) {
+    console.log('Session closed: ' + sessionId);
+  } else {
+    console.log('Error: ' + result.error);
+  }
+}
+
+async function deleteSession() {
+  const sessionId = args[2];
+  if (!sessionId) {
+    console.log('Usage: maf session delete <id>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const result = await framework.deleteSession(sessionId);
+  
+  if (result.success) {
+    console.log('Session deleted: ' + sessionId);
+  } else {
+    console.log('Error: ' + result.error);
+  }
 }
 
 function createTask() {
@@ -425,7 +792,6 @@ function startWatch() {
   setInterval(checkChanges, pollInterval);
 }
 
-// Memory functions
 async function showMemoryStats() {
   const agentName = args[2];
   if (!agentName) {
@@ -542,7 +908,6 @@ async function clearMemory() {
   console.log('Cleared ' + (type || 'all') + ' memory for ' + agentName);
 }
 
-// LLM functions
 async function llmChat() {
   const agentName = args[2];
   const message = args[3];
@@ -579,7 +944,6 @@ function showLLMConfig() {
   console.log('Max Tokens: ' + (llmConfig.maxTokens || 4096));
 }
 
-// Tool functions
 function listTools() {
   const framework = getFramework();
   const tools = framework.listTools();
@@ -632,7 +996,6 @@ async function execTool() {
   }
 }
 
-// Agent Runtime functions
 async function runAgent() {
   const agentName = args[2];
   const input = args[3];
@@ -667,12 +1030,44 @@ switch (command) {
   case 'config':
     showConfig();
     break;
+  case 'ask':
+    processUserInstruction();
+    break;
+  case 'clarify':
+    provideClarification();
+    break;
+  case 'status':
+    showOrchestratorStatus();
+    break;
+  case 'tasks':
+    listOrchestratorTasks();
+    break;
+  case 'pause':
+    pauseOrchestrator();
+    break;
+  case 'resume':
+    resumeOrchestrator();
+    break;
+  case 'cancel':
+    cancelOrchestrator();
+    break;
   case 'agent':
     var subCmd = args[1];
     if (subCmd === 'list') listAgents();
     else if (subCmd === 'add') addAgent();
     else if (subCmd === 'show') showAgent();
-    else console.log('Unknown agent command. Use: list, add, show');
+    else if (subCmd === 'create') createDynamicAgent();
+    else if (subCmd === 'templates') showAgentTemplates();
+    else if (subCmd === 'remove') removeDynamicAgent();
+    else console.log('Unknown agent command. Use: list, add, show, create, templates, remove');
+    break;
+  case 'session':
+    var subCmd = args[1];
+    if (subCmd === 'list') listSessions();
+    else if (subCmd === 'show') showSession();
+    else if (subCmd === 'close') closeSession();
+    else if (subCmd === 'delete') deleteSession();
+    else console.log('Unknown session command. Use: list, show, close, delete');
     break;
   case 'task':
     var subCmd = args[1];

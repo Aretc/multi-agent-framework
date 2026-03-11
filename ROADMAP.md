@@ -3,15 +3,80 @@
 ## 版本路线图
 
 ```
-v1.0 (当前) ──► v1.5 ──► v2.0 ──► v3.0
-   │              │         │         │
-   │              │         │         └── 企业级特性
-   │              │         │
-   │              │         └── LLM集成 + 智能化
-   │              │
-   │              └── 基础能力完善
+v1.0 ──► v1.5 (当前) ──► v2.0 ──► v2.5 ──► v3.0
+   │         │             │         │         │
+   │         │             │         │         └── 企业级特性
+   │         │             │         │
+   │         │             │         └── 工作流引擎
+   │         │             │
+   │         │             └── LLM集成 + 智能化
+   │         │
+   │         └── 基础能力完善 ✅ 已完成
    │
    └── 基础框架
+```
+
+---
+
+## ✅ 已完成功能 (v1.5)
+
+### 1. 动态智能体系统 ✅
+- **Orchestrator**: 主控智能体，负责理解指令、规划任务、协调子智能体
+- **DynamicAgentFactory**: 动态创建10种类型的智能体
+  - general, coder, researcher, writer, analyzer, tester, reviewer, designer, planner, coordinator
+- **自动类型检测**: 根据任务关键词自动选择合适的智能体类型
+
+### 2. 会话隔离系统 ✅
+- **SessionManager**: 会话创建、暂停、恢复、关闭
+- **内存隔离**: 每个智能体拥有独立会话，防止记忆污染
+- **快照机制**: 支持状态保存和回滚
+- **自动保存**: 定期自动持久化会话状态
+
+### 3. 任务验证机制 ✅
+- **打回处理**: 任务结果可被拒绝，最多3次
+- **自动重建**: 超过3次打回自动创建新智能体
+- **状态追踪**: 完整的任务生命周期管理
+
+### 4. 澄清机制 ✅
+- **理解确认**: 主智能体先理解用户意图
+- **问题生成**: 不明确时主动提问
+- **交互式响应**: 用户可提供澄清信息
+
+### 5. CLI 增强 ✅
+```bash
+maf ask <instruction>      # 直接向编排器发送指令
+maf clarify <responses>    # 提交澄清响应
+maf status                 # 查看编排器状态
+maf tasks                  # 查看任务列表
+maf pause/resume/cancel    # 控制编排器
+
+maf agent create <type>    # 动态创建智能体
+maf agent templates        # 列出可用模板
+maf agent remove <id>      # 删除智能体
+
+maf session list/show/close/delete  # 会话管理
+```
+
+### 6. Web Dashboard ✅ (v3.0 提前完成)
+- **实时监控**: WebSocket 实时更新
+- **统计面板**: 会话数、智能体数、任务数、完成数
+- **智能体管理**: 列表、状态、删除
+- **任务管理**: 列表、状态、分配
+- **会话管理**: 列表、状态、时间
+- **快速命令**: 输入指令、澄清交互
+- **活动日志**: 实时日志 + 筛选功能 (info/warning/error)
+- **中英文切换**: i18n 国际化支持
+
+### 7. API 服务 ✅
+```
+/api/system/stats          # 系统统计
+/api/sessions              # 会话管理
+/api/agents                # 智能体管理
+/api/tasks/orchestrator    # 任务管理
+/api/orchestrator/*        # 编排器控制
+/api/memory/*              # 记忆管理
+/api/llm/*                 # LLM配置
+/api/tools/*               # 工具管理
 ```
 
 ---
