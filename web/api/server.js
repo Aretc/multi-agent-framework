@@ -94,8 +94,15 @@ function createApp(options) {
   });
 
   app.post('/api/sessions', function(req, res) {
-    const session = framework.createSession(req.body);
-    res.json({ success: true, data: { id: session.id } });
+    try {
+      const options = {
+        id: req.body.name || req.body.id
+      };
+      const session = framework.createSession(options);
+      res.json({ success: true, data: { id: session.id } });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   app.delete('/api/sessions/:id', async function(req, res) {
