@@ -462,7 +462,21 @@ class SessionManager {
 
   listSessions() {
     const results = [];
+    const addedIds = new Set();
     
+    // First add sessions from memory
+    this.sessions.forEach(function(session, id) {
+      const stats = session.getStats ? session.getStats() : { id: id, status: 'active' };
+      results.push({
+        id: stats.id || id,
+        status: stats.status || 'active',
+        createdAt: stats.createdAt || new Date().toISOString(),
+        updatedAt: stats.updatedAt || new Date().toISOString()
+      });
+      addedIds.add(id);
+    });
+    
+    // Then add sessions from file system that are not in memory
     if (fs.existsSync(this.rootPath)) {
       const dirs = fs.readdirSync(this.rootPath);
       dirs.forEach(function(dir) {
@@ -470,15 +484,15 @@ class SessionManager {
         if (fs.existsSync(sessionPath)) {
           try {
             const data = JSON.parse(fs.readFileSync(sessionPath, 'utf-8'));
-            results.push({
-              id: data.id,
-              status: data.status,
-              createdAt: data.createdAt,
-              updatedAt: data.updatedAt
-            });
-          } catch (e) {
-            // Skip invalid sessions
-          }
+            if (!addedIds.has(data.id)) {
+              results.push({
+                id: data.id,
+                status: data.status,
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt
+              });
+            }
+          } catch (e) {}
         }
       }.bind(this));
     }
