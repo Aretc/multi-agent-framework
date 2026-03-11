@@ -93,6 +93,36 @@ function showHelp() {
   console.log('  Tools:');
   console.log('    tool list                          List available tools');
   console.log('    tool exec <name> <params_json>     Execute a tool');
+  console.log('    tool enable <name>                 Enable a tool');
+  console.log('    tool disable <name>                Disable a tool');
+  console.log('    tool stats                         Show tool statistics');
+  console.log('');
+  console.log('  Skills:');
+  console.log('    skill list                         List installed skills');
+  console.log('    skill install <name> <template>    Install a skill from template');
+  console.log('    skill show <name>                  Show skill details');
+  console.log('    skill enable <name>                Enable a skill');
+  console.log('    skill disable <name>               Disable a skill');
+  console.log('    skill exec <name> <input_json>     Execute a skill');
+  console.log('    skill uninstall <name>             Uninstall a skill');
+  console.log('');
+  console.log('  Rules:');
+  console.log('    rule list                          List all rules');
+  console.log('    rule add <name> <type>             Add a new rule');
+  console.log('    rule show <name>                   Show rule details');
+  console.log('    rule enable <name>                 Enable a rule');
+  console.log('    rule disable <name>                Disable a rule');
+  console.log('    rule validate <data_json>          Validate data against rules');
+  console.log('    rule stats                         Show rule statistics');
+  console.log('');
+  console.log('  MCP (Model Context Protocol):');
+  console.log('    mcp list                           List MCP clients');
+  console.log('    mcp add <name> <command>           Add an MCP client');
+  console.log('    mcp remove <name>                  Remove an MCP client');
+  console.log('    mcp tools                          List all MCP tools');
+  console.log('    mcp resources                      List all MCP resources');
+  console.log('    mcp prompts                        List all MCP prompts');
+  console.log('    mcp exec <client> <tool> <args>    Execute an MCP tool');
   console.log('');
   console.log('  Agent Runtime:');
   console.log('    run <agent> <input>                Run agent with input');
@@ -1023,6 +1053,489 @@ async function runAgent() {
   }
 }
 
+// ========== SKILL COMMANDS ==========
+
+async function listSkills() {
+  const framework = getFramework();
+  await framework.initSkills();
+  const skills = framework.listSkills();
+  
+  console.log('\n=== Installed Skills ===\n');
+  if (skills.length === 0) {
+    console.log('No skills installed.');
+    return;
+  }
+  
+  skills.forEach(function(skill) {
+    const status = skill.enabled ? '✅' : '❌';
+    console.log(status + ' [' + skill.name + '] v' + skill.version + ' (' + skill.category + ')');
+    console.log('   ' + skill.description);
+    if (skill.tools && skill.tools.length > 0) {
+      console.log('   Tools: ' + skill.tools.join(', '));
+    }
+    console.log('');
+  });
+}
+
+async function installSkill() {
+  const name = args[2];
+  const template = args[3] || 'basic';
+  
+  if (!name) {
+    console.log('Usage: maf skill install <name> [template]');
+    console.log('Templates: basic, code, analysis, automation');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  try {
+    const skill = await framework.createSkillFromTemplate(name, template);
+    console.log('Skill installed: ' + skill.name + ' v' + skill.version);
+    console.log('Category: ' + skill.category);
+    console.log('Description: ' + skill.description);
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+async function showSkill() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf skill show <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const skill = framework.getSkill(name);
+  
+  if (!skill) {
+    console.log('Skill not found: ' + name);
+    return;
+  }
+  
+  console.log('\n=== Skill: ' + skill.name + ' ===\n');
+  console.log('Version: ' + skill.version);
+  console.log('Category: ' + skill.category);
+  console.log('Description: ' + skill.description);
+  console.log('Status: ' + (skill.enabled ? 'Enabled' : 'Disabled'));
+  console.log('Author: ' + skill.author);
+  console.log('Tools: ' + (skill.tools || []).join(', '));
+  console.log('Rules: ' + (skill.rules || []).join(', '));
+  console.log('Dependencies: ' + (skill.dependencies || []).join(', '));
+  console.log('Created: ' + skill.createdAt);
+  console.log('Last Used: ' + (skill.lastUsed || 'Never'));
+  console.log('Use Count: ' + skill.useCount);
+}
+
+async function enableSkill() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf skill enable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.enableSkill(name)) {
+    console.log('Skill enabled: ' + name);
+  } else {
+    console.log('Skill not found: ' + name);
+  }
+}
+
+async function disableSkill() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf skill disable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.disableSkill(name)) {
+    console.log('Skill disabled: ' + name);
+  } else {
+    console.log('Skill not found: ' + name);
+  }
+}
+
+async function executeSkill() {
+  const name = args[2];
+  const inputJson = args[3];
+  
+  if (!name) {
+    console.log('Usage: maf skill exec <name> [input_json]');
+    process.exit(1);
+  }
+  
+  let input = {};
+  if (inputJson) {
+    try {
+      input = JSON.parse(inputJson);
+    } catch (e) {
+      console.log('Invalid JSON input: ' + e.message);
+      process.exit(1);
+    }
+  }
+  
+  const framework = getFramework();
+  
+  try {
+    const result = await framework.executeSkill(name, input);
+    console.log('\n=== Skill Execution Result ===\n');
+    console.log('Success: ' + result.success);
+    if (result.result) {
+      console.log('Result: ' + JSON.stringify(result.result, null, 2));
+    }
+    if (result.error) {
+      console.log('Error: ' + result.error);
+    }
+    console.log('Duration: ' + result.duration + 'ms');
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+async function uninstallSkill() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf skill uninstall <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  if (await framework.uninstallSkill(name)) {
+    console.log('Skill uninstalled: ' + name);
+  } else {
+    console.log('Skill not found: ' + name);
+  }
+}
+
+// ========== RULE COMMANDS ==========
+
+async function listRules() {
+  const framework = getFramework();
+  await framework.initRules();
+  const rules = framework.listRules();
+  
+  console.log('\n=== Rules ===\n');
+  if (rules.length === 0) {
+    console.log('No rules defined.');
+    return;
+  }
+  
+  rules.forEach(function(rule) {
+    const status = rule.enabled ? '✅' : '❌';
+    console.log(status + ' [' + rule.name + '] (' + rule.type + ', priority: ' + rule.priority + ')');
+    console.log('   ' + rule.description);
+    console.log('   Scope: ' + rule.scope);
+    console.log('');
+  });
+}
+
+async function showRule() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf rule show <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const rule = framework.getRule(name);
+  
+  if (!rule) {
+    console.log('Rule not found: ' + name);
+    return;
+  }
+  
+  console.log('\n=== Rule: ' + rule.name + ' ===\n');
+  console.log('Type: ' + rule.type);
+  console.log('Priority: ' + rule.priority);
+  console.log('Description: ' + rule.description);
+  console.log('Status: ' + (rule.enabled ? 'Enabled' : 'Disabled'));
+  console.log('Scope: ' + rule.scope);
+  if (rule.target) console.log('Target: ' + rule.target);
+  if (rule.events && rule.events.length > 0) {
+    console.log('Events: ' + rule.events.join(', '));
+  }
+  console.log('Trigger Count: ' + rule.triggerCount);
+  console.log('Last Triggered: ' + (rule.lastTriggered || 'Never'));
+}
+
+async function enableRule() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf rule enable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.enableRule(name)) {
+    console.log('Rule enabled: ' + name);
+  } else {
+    console.log('Rule not found: ' + name);
+  }
+}
+
+async function disableRule() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf rule disable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.disableRule(name)) {
+    console.log('Rule disabled: ' + name);
+  } else {
+    console.log('Rule not found: ' + name);
+  }
+}
+
+async function validateWithRules() {
+  const dataJson = args[2];
+  if (!dataJson) {
+    console.log('Usage: maf rule validate <data_json>');
+    process.exit(1);
+  }
+  
+  let data;
+  try {
+    data = JSON.parse(dataJson);
+  } catch (e) {
+    console.log('Invalid JSON: ' + e.message);
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  const result = await framework.validateWithRules(data);
+  
+  console.log('\n=== Validation Result ===\n');
+  console.log('Valid: ' + result.valid);
+  if (result.failures && result.failures.length > 0) {
+    console.log('\nFailures:');
+    result.failures.forEach(function(f) {
+      console.log('  - ' + f.rule + ': ' + (f.message || f.error));
+    });
+  }
+}
+
+async function showRuleStats() {
+  const framework = getFramework();
+  const stats = framework.getRuleStats();
+  
+  if (!stats) {
+    console.log('Rule engine not initialized.');
+    return;
+  }
+  
+  console.log('\n=== Rule Statistics ===\n');
+  console.log('Total Rules: ' + stats.total);
+  console.log('Enabled: ' + stats.enabled);
+  console.log('Disabled: ' + stats.disabled);
+  console.log('Total Triggers: ' + stats.totalTriggers);
+  console.log('\nBy Type:');
+  Object.entries(stats.byType).forEach(function([type, count]) {
+    console.log('  ' + type + ': ' + count);
+  });
+}
+
+// ========== MCP COMMANDS ==========
+
+async function listMCPClients() {
+  const framework = getFramework();
+  await framework.initMCP();
+  const clients = framework.listMCPClients();
+  
+  console.log('\n=== MCP Clients ===\n');
+  if (clients.length === 0) {
+    console.log('No MCP clients configured.');
+    return;
+  }
+  
+  clients.forEach(function(client) {
+    const status = client.status === 'connected' ? '✅' : '❌';
+    console.log(status + ' [' + client.name + '] ' + client.status);
+    console.log('   Tools: ' + client.toolsCount);
+    console.log('   Resources: ' + client.resourcesCount);
+    console.log('   Prompts: ' + client.promptsCount);
+    console.log('');
+  });
+}
+
+async function addMCPClient() {
+  const name = args[2];
+  const command = args[3];
+  
+  if (!name || !command) {
+    console.log('Usage: mcp add <name> <command>');
+    console.log('Example: mcp add filesystem "npx @modelcontextprotocol/server-filesystem /path"');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  try {
+    await framework.addMCPClient(name, { command: command, args: [] });
+    console.log('MCP client added: ' + name);
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+async function removeMCPClient() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: mcp remove <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  
+  if (await framework.removeMCPClient(name)) {
+    console.log('MCP client removed: ' + name);
+  } else {
+    console.log('Client not found: ' + name);
+  }
+}
+
+async function listMCPTools() {
+  const framework = getFramework();
+  const tools = framework.getAllMCPTools();
+  
+  console.log('\n=== MCP Tools ===\n');
+  if (tools.length === 0) {
+    console.log('No MCP tools available.');
+    return;
+  }
+  
+  tools.forEach(function(tool) {
+    console.log('[' + tool.client + '] ' + tool.name);
+    console.log('   ' + (tool.description || 'No description'));
+    console.log('');
+  });
+}
+
+async function listMCPResources() {
+  const framework = getFramework();
+  const resources = framework.getAllMCPResources();
+  
+  console.log('\n=== MCP Resources ===\n');
+  if (resources.length === 0) {
+    console.log('No MCP resources available.');
+    return;
+  }
+  
+  resources.forEach(function(resource) {
+    console.log('[' + resource.client + '] ' + resource.uri);
+    console.log('   ' + (resource.name || resource.uri));
+    console.log('');
+  });
+}
+
+async function listMCPPrompts() {
+  const framework = getFramework();
+  const prompts = framework.getAllMCPPrompts();
+  
+  console.log('\n=== MCP Prompts ===\n');
+  if (prompts.length === 0) {
+    console.log('No MCP prompts available.');
+    return;
+  }
+  
+  prompts.forEach(function(prompt) {
+    console.log('[' + prompt.client + '] ' + prompt.name);
+    console.log('   ' + (prompt.description || 'No description'));
+    console.log('');
+  });
+}
+
+async function execMCPTool() {
+  const clientName = args[2];
+  const toolName = args[3];
+  const argsJson = args[4];
+  
+  if (!clientName || !toolName) {
+    console.log('Usage: mcp exec <client> <tool> [args_json]');
+    process.exit(1);
+  }
+  
+  let toolArgs = {};
+  if (argsJson) {
+    try {
+      toolArgs = JSON.parse(argsJson);
+    } catch (e) {
+      console.log('Invalid JSON args: ' + e.message);
+      process.exit(1);
+    }
+  }
+  
+  const framework = getFramework();
+  
+  try {
+    const result = await framework.callMCPTool(clientName, toolName, toolArgs);
+    console.log('\n=== MCP Tool Result ===\n');
+    console.log(JSON.stringify(result, null, 2));
+  } catch (e) {
+    console.log('Error: ' + e.message);
+  }
+}
+
+// ========== TOOL EXTENDED COMMANDS ==========
+
+async function enableTool() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf tool enable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.enableTool(name)) {
+    console.log('Tool enabled: ' + name);
+  } else {
+    console.log('Tool not found: ' + name);
+  }
+}
+
+async function disableTool() {
+  const name = args[2];
+  if (!name) {
+    console.log('Usage: maf tool disable <name>');
+    process.exit(1);
+  }
+  
+  const framework = getFramework();
+  if (framework.disableTool(name)) {
+    console.log('Tool disabled: ' + name);
+  } else {
+    console.log('Tool not found: ' + name);
+  }
+}
+
+async function showToolStats() {
+  const framework = getFramework();
+  const stats = framework.getToolStats();
+  
+  if (!stats) {
+    console.log('Tool system not initialized.');
+    return;
+  }
+  
+  console.log('\n=== Tool Statistics ===\n');
+  console.log('Total Tools: ' + stats.total);
+  console.log('\nBy Status:');
+  Object.entries(stats.byStatus).forEach(function([status, count]) {
+    console.log('  ' + status + ': ' + count);
+  });
+  console.log('\nBy Category:');
+  Object.entries(stats.byCategory).forEach(function([cat, count]) {
+    console.log('  ' + cat + ': ' + count);
+  });
+  console.log('\nTotal Executions: ' + stats.totalExecutions);
+  console.log('Total Errors: ' + stats.totalErrors);
+}
+
 switch (command) {
   case 'init':
     initProject();
@@ -1115,7 +1628,42 @@ switch (command) {
     var subCmd = args[1];
     if (subCmd === 'list') listTools();
     else if (subCmd === 'exec') execTool();
-    else console.log('Unknown tool command. Use: list, exec');
+    else if (subCmd === 'enable') enableTool();
+    else if (subCmd === 'disable') disableTool();
+    else if (subCmd === 'stats') showToolStats();
+    else console.log('Unknown tool command. Use: list, exec, enable, disable, stats');
+    break;
+  case 'skill':
+    var subCmd = args[1];
+    if (subCmd === 'list') listSkills();
+    else if (subCmd === 'install') installSkill();
+    else if (subCmd === 'show') showSkill();
+    else if (subCmd === 'enable') enableSkill();
+    else if (subCmd === 'disable') disableSkill();
+    else if (subCmd === 'exec') executeSkill();
+    else if (subCmd === 'uninstall') uninstallSkill();
+    else console.log('Unknown skill command. Use: list, install, show, enable, disable, exec, uninstall');
+    break;
+  case 'rule':
+    var subCmd = args[1];
+    if (subCmd === 'list') listRules();
+    else if (subCmd === 'show') showRule();
+    else if (subCmd === 'enable') enableRule();
+    else if (subCmd === 'disable') disableRule();
+    else if (subCmd === 'validate') validateWithRules();
+    else if (subCmd === 'stats') showRuleStats();
+    else console.log('Unknown rule command. Use: list, show, enable, disable, validate, stats');
+    break;
+  case 'mcp':
+    var subCmd = args[1];
+    if (subCmd === 'list') listMCPClients();
+    else if (subCmd === 'add') addMCPClient();
+    else if (subCmd === 'remove') removeMCPClient();
+    else if (subCmd === 'tools') listMCPTools();
+    else if (subCmd === 'resources') listMCPResources();
+    else if (subCmd === 'prompts') listMCPPrompts();
+    else if (subCmd === 'exec') execMCPTool();
+    else console.log('Unknown mcp command. Use: list, add, remove, tools, resources, prompts, exec');
     break;
   case 'run':
     runAgent();

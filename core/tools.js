@@ -1,505 +1,602 @@
 /**
  * Tool System for Multi-Agent Framework
  * 
- * Provides tool registration, execution, and management
+ * Supports:
+ * - Tool registration and discovery
+ * - Tool execution with validation
+ * - Built-in tools (file, web, code, api)
+ * - Custom tool creation
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { EventEmitter } = require('events');
 
-// Base Tool Class
-class Tool {
-  constructor(config) {
-    config = config || {};
-    this.name = config.name || 'unknown';
-    this.description = config.description || 'No description';
-    this.parameters = config.parameters || {};
-    this.required = config.required || [];
-    this.handler = config.handler || null;
-    this.timeout = config.timeout || 30000;
-    this.retries = config.retries || 0;
+const TOOL_STATUS = {
+  REGISTERED: 'registered',
+  ACTIVE: 'active',
+  DISABLED: 'disabled',
+  ERROR: 'error'
+};
+
+const BUILTIN_TOOLS = {};
+
+class ToolDefinition {
+  constructor(definition) {
+    this.name = definition.name;
+    this.description = definition.description || '';
+    this.version = definition.version || '1.0.0';
+    this.category = definition.category || 'general';
+    this.parameters = definition.parameters || {};
+    this.returns = definition.returns || {};
+    this.examples = definition.examples || [];
+    this.permissions = definition.permissions || [];
+    this.timeout = definition.timeout || 30000;
+    this.retryCount = definition.retryCount || 0;
+    this.retryDelay = definition.retryDelay || 1000;
+    this.handler = definition.handler || null;
+    this.status = TOOL_STATUS.REGISTERED;
+    this.metadata = definition.metadata || {};
+    this.createdAt = new Date().toISOString();
+    this.lastUsed = null;
+    this.useCount = 0;
+    this.errorCount = 0;
   }
 
   validate(params) {
     const errors = [];
     
-    this.required.forEach(function(param) {
-      if (params[param] === undefined || params[param] === null) {
-        errors.push('Missing required parameter: ' + param);
+    for (const [key, schema] of Object.entries(this.parameters)) {
+      if (schema.required && (params[key] === undefined || params[key] === null)) {
+        errors.push(`Missing required parameter: ${key}`);
+        continue;
       }
-    });
 
-    Object.keys(params).forEach(function(key) {
-      if (this.parameters[key]) {
-        const schema = this.parameters[key];
-        const value = params[key];
-        
-        if (schema.type) {
-          const actualType = Array.isArray(value) ? 'array' : typeof value;
-          if (actualType !== schema.type) {
-            errors.push('Parameter ' + key + ' should be ' + schema.type + ', got ' + actualType);
-          }
+      if (params[key] !== undefined && schema.type) {
+        const actualType = Array.isArray(params[key]) ? 'array' : typeof params[key];
+        if (actualType !== schema.type) {
+          errors.push(`Parameter ${key} should be ${schema.type}, got ${actualType}`);
         }
       }
-    }.bind(this));
 
-    return errors.length === 0 ? null : errors;
-  }
-
-  async execute(params) {
-    const errors = this.validate(params);
-    if (errors) {
-      return { success: false, error: 'Validation failed', details: errors };
-    }
-
-    if (!this.handler) {
-      return { success: false, error: 'No handler defined' };
-    }
-
-    let lastError = null;
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
-      try {
-        const result = await Promise.race([
-          this.handler(params),
-          new Promise(function(_, reject) {
-            setTimeout(function() { reject(new Error('Timeout')); }, this.timeout);
-          }.bind(this))
-        ]);
-        return { success: true, result: result };
-      } catch (e) {
-        lastError = e;
-        if (attempt < this.retries) {
-          await new Promise(function(r) { setTimeout(r, 1000); });
-        }
+      if (params[key] !== undefined && schema.enum && !schema.enum.includes(params[key])) {
+        errors.push(`Parameter ${key} must be one of: ${schema.enum.join(', ')}`);
       }
     }
 
-    return { success: false, error: lastError.message };
+    return { valid: errors.length === 0, errors };
   }
 
   toJSON() {
     return {
       name: this.name,
       description: this.description,
+      version: this.version,
+      category: this.category,
       parameters: this.parameters,
-      required: this.required
+      returns: this.returns,
+      examples: this.examples,
+      permissions: this.permissions,
+      timeout: this.timeout,
+      status: this.status,
+      metadata: this.metadata,
+      createdAt: this.createdAt,
+      lastUsed: this.lastUsed,
+      useCount: this.useCount,
+      errorCount: this.errorCount
     };
   }
 }
 
-// Tool Registry
-class ToolRegistry {
-  constructor() {
+class ToolRegistry extends EventEmitter {
+  constructor(options) {
+    super();
+    options = options || {};
     this.tools = new Map();
     this.categories = new Map();
+    this.storagePath = options.storagePath || './.maf/tools';
+    this.permissionChecker = options.permissionChecker || null;
   }
 
-  register(tool) {
-    if (!(tool instanceof Tool)) {
-      tool = new Tool(tool);
+  async init() {
+    await this.loadBuiltInTools();
+    await this.loadCustomTools();
+  }
+
+  register(definition) {
+    if (this.tools.has(definition.name)) {
+      throw new Error(`Tool already registered: ${definition.name}`);
     }
+
+    const tool = new ToolDefinition(definition);
     this.tools.set(tool.name, tool);
+
+    if (!this.categories.has(tool.category)) {
+      this.categories.set(tool.category, new Set());
+    }
+    this.categories.get(tool.category).add(tool.name);
+
+    this.emit('tool:registered', { name: tool.name, tool });
     return tool;
   }
 
   unregister(name) {
-    return this.tools.delete(name);
+    const tool = this.tools.get(name);
+    if (!tool) {
+      return false;
+    }
+
+    this.tools.delete(name);
+    
+    const categoryTools = this.categories.get(tool.category);
+    if (categoryTools) {
+      categoryTools.delete(name);
+      if (categoryTools.size === 0) {
+        this.categories.delete(tool.category);
+      }
+    }
+
+    this.emit('tool:unregistered', { name });
+    return true;
   }
 
   get(name) {
     return this.tools.get(name);
   }
 
-  has(name) {
-    return this.tools.has(name);
-  }
+  list(options) {
+    options = options || {};
+    let tools = Array.from(this.tools.values());
 
-  list() {
-    return Array.from(this.tools.values()).map(function(t) { return t.toJSON(); });
-  }
-
-  listByCategory(category) {
-    const tools = this.categories.get(category) || [];
-    return tools.map(function(name) { return this.tools.get(name); }.bind(this)).filter(Boolean);
-  }
-
-  categorize(toolName, category) {
-    if (!this.categories.has(category)) {
-      this.categories.set(category, []);
+    if (options.category) {
+      tools = tools.filter(t => t.category === options.category);
     }
-    this.categories.get(category).push(toolName);
+
+    if (options.status) {
+      tools = tools.filter(t => t.status === options.status);
+    }
+
+    return tools.map(t => t.toJSON());
   }
 
-  async execute(name, params) {
+  listCategories() {
+    const result = {};
+    for (const [category, toolNames] of this.categories) {
+      result[category] = Array.from(toolNames);
+    }
+    return result;
+  }
+
+  async execute(name, params, context) {
     const tool = this.tools.get(name);
     if (!tool) {
-      return { success: false, error: 'Tool not found: ' + name };
+      throw new Error(`Tool not found: ${name}`);
     }
-    return await tool.execute(params || {});
+
+    if (tool.status === TOOL_STATUS.DISABLED) {
+      throw new Error(`Tool is disabled: ${name}`);
+    }
+
+    const validation = tool.validate(params || {});
+    if (!validation.valid) {
+      throw new Error(`Invalid parameters: ${validation.errors.join(', ')}`);
+    }
+
+    if (this.permissionChecker && tool.permissions.length > 0) {
+      const hasPermission = await this.permissionChecker(context, tool.permissions);
+      if (!hasPermission) {
+        throw new Error(`Permission denied for tool: ${name}`);
+      }
+    }
+
+    const startTime = Date.now();
+    let lastError = null;
+    let attempts = 0;
+    const maxAttempts = tool.retryCount + 1;
+
+    while (attempts < maxAttempts) {
+      try {
+        tool.status = TOOL_STATUS.ACTIVE;
+        this.emit('tool:executing', { name, params, attempt: attempts + 1 });
+
+        const result = await Promise.race([
+          tool.handler(params, context),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Tool execution timeout')), tool.timeout)
+          )
+        ]);
+
+        const duration = Date.now() - startTime;
+        tool.lastUsed = new Date().toISOString();
+        tool.useCount++;
+
+        this.emit('tool:executed', { name, params, result, duration });
+        return { success: true, result, duration };
+
+      } catch (error) {
+        lastError = error;
+        attempts++;
+        tool.errorCount++;
+
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, tool.retryDelay));
+        }
+      }
+    }
+
+    tool.status = TOOL_STATUS.ERROR;
+    const duration = Date.now() - startTime;
+    this.emit('tool:error', { name, params, error: lastError, duration });
+    
+    return { success: false, error: lastError.message, duration };
   }
 
-  getSchema() {
-    const schema = {
-      type: 'object',
-      properties: {},
-      required: []
+  enable(name) {
+    const tool = this.tools.get(name);
+    if (tool) {
+      tool.status = TOOL_STATUS.REGISTERED;
+      this.emit('tool:enabled', { name });
+      return true;
+    }
+    return false;
+  }
+
+  disable(name) {
+    const tool = this.tools.get(name);
+    if (tool) {
+      tool.status = TOOL_STATUS.DISABLED;
+      this.emit('tool:disabled', { name });
+      return true;
+    }
+    return false;
+  }
+
+  async loadBuiltInTools() {
+    for (const [name, handler] of Object.entries(BUILTIN_TOOLS)) {
+      try {
+        this.register(handler);
+      } catch (e) {
+        // Tool already registered
+      }
+    }
+  }
+
+  async loadCustomTools() {
+    const toolsPath = path.join(this.storagePath, 'custom');
+    if (!fs.existsSync(toolsPath)) {
+      return;
+    }
+
+    const files = fs.readdirSync(toolsPath).filter(f => f.endsWith('.js'));
+    for (const file of files) {
+      try {
+        const toolPath = path.join(toolsPath, file);
+        delete require.cache[require.resolve(toolPath)];
+        const definition = require(toolPath);
+        if (definition.name && definition.handler) {
+          this.register(definition);
+        }
+      } catch (e) {
+        this.emit('tool:load:error', { file, error: e.message });
+      }
+    }
+  }
+
+  async saveCustomTool(definition) {
+    const toolsPath = path.join(this.storagePath, 'custom');
+    if (!fs.existsSync(toolsPath)) {
+      fs.mkdirSync(toolsPath, { recursive: true });
+    }
+
+    const filePath = path.join(toolsPath, `${definition.name}.js`);
+    const content = `/**
+ * Custom Tool: ${definition.name}
+ * ${definition.description || ''}
+ */
+
+module.exports = ${JSON.stringify(definition, null, 2).replace(
+  /"handler":\s*"(.+)"/g,
+  '"handler": $1'
+)};
+
+// Replace the handler string above with your actual handler function
+`;
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    this.register(definition);
+  }
+
+  getStats() {
+    const tools = Array.from(this.tools.values());
+    return {
+      total: tools.length,
+      byStatus: {
+        registered: tools.filter(t => t.status === TOOL_STATUS.REGISTERED).length,
+        active: tools.filter(t => t.status === TOOL_STATUS.ACTIVE).length,
+        disabled: tools.filter(t => t.status === TOOL_STATUS.DISABLED).length,
+        error: tools.filter(t => t.status === TOOL_STATUS.ERROR).length
+      },
+      byCategory: Object.fromEntries(
+        Array.from(this.categories.entries()).map(([k, v]) => [k, v.size])
+      ),
+      totalExecutions: tools.reduce((sum, t) => sum + t.useCount, 0),
+      totalErrors: tools.reduce((sum, t) => sum + t.errorCount, 0)
     };
-
-    this.tools.forEach(function(tool, name) {
-      schema.properties[name] = {
-        type: 'object',
-        description: tool.description,
-        properties: tool.parameters
-      };
-    });
-
-    return schema;
   }
 }
 
-// Built-in Tools
-
-const fileReadTool = new Tool({
+// Built-in Tools Implementation
+BUILTIN_TOOLS.file_read = {
   name: 'file_read',
   description: 'Read content from a file',
+  version: '1.0.0',
+  category: 'file',
   parameters: {
-    path: { type: 'string', description: 'File path to read' },
-    encoding: { type: 'string', description: 'File encoding (default: utf-8)' }
+    path: { type: 'string', required: true, description: 'File path to read' },
+    encoding: { type: 'string', default: 'utf-8', description: 'File encoding' }
   },
-  required: ['path'],
-  handler: async function(params) {
-    const encoding = params.encoding || 'utf-8';
-    const content = fs.readFileSync(params.path, encoding);
-    return { content: content, path: params.path };
+  returns: { type: 'string', description: 'File content' },
+  permissions: ['file:read'],
+  handler: async (params) => {
+    return fs.readFileSync(params.path, params.encoding || 'utf-8');
   }
-});
+};
 
-const fileWriteTool = new Tool({
+BUILTIN_TOOLS.file_write = {
   name: 'file_write',
   description: 'Write content to a file',
+  version: '1.0.0',
+  category: 'file',
   parameters: {
-    path: { type: 'string', description: 'File path to write' },
-    content: { type: 'string', description: 'Content to write' },
-    encoding: { type: 'string', description: 'File encoding (default: utf-8)' }
+    path: { type: 'string', required: true, description: 'File path to write' },
+    content: { type: 'string', required: true, description: 'Content to write' },
+    encoding: { type: 'string', default: 'utf-8', description: 'File encoding' }
   },
-  required: ['path', 'content'],
-  handler: async function(params) {
-    const encoding = params.encoding || 'utf-8';
+  returns: { type: 'boolean', description: 'Success status' },
+  permissions: ['file:write'],
+  handler: async (params) => {
     const dir = path.dirname(params.path);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(params.path, params.content, encoding);
-    return { success: true, path: params.path, bytes: params.content.length };
+    fs.writeFileSync(params.path, params.content, params.encoding || 'utf-8');
+    return true;
   }
-});
+};
 
-const fileExistsTool = new Tool({
-  name: 'file_exists',
-  description: 'Check if a file exists',
-  parameters: {
-    path: { type: 'string', description: 'File path to check' }
-  },
-  required: ['path'],
-  handler: async function(params) {
-    return { exists: fs.existsSync(params.path), path: params.path };
-  }
-});
-
-const directoryListTool = new Tool({
-  name: 'directory_list',
+BUILTIN_TOOLS.file_list = {
+  name: 'file_list',
   description: 'List files in a directory',
+  version: '1.0.0',
+  category: 'file',
   parameters: {
-    path: { type: 'string', description: 'Directory path' },
-    recursive: { type: 'boolean', description: 'List recursively' }
+    path: { type: 'string', required: true, description: 'Directory path' },
+    recursive: { type: 'boolean', default: false, description: 'List recursively' },
+    pattern: { type: 'string', description: 'Glob pattern to filter files' }
   },
-  required: ['path'],
-  handler: async function(params) {
-    if (!fs.existsSync(params.path)) {
-      return { error: 'Directory not found', path: params.path };
-    }
-    
+  returns: { type: 'array', description: 'List of file paths' },
+  permissions: ['file:read'],
+  handler: async (params) => {
     const results = [];
-    
-    function listDir(dirPath, basePath) {
-      const items = fs.readdirSync(dirPath);
-      items.forEach(function(item) {
-        const itemPath = path.join(dirPath, item);
-        const stat = fs.statSync(itemPath);
-        results.push({
-          name: item,
-          path: path.relative(basePath, itemPath),
-          type: stat.isDirectory() ? 'directory' : 'file',
-          size: stat.size
-        });
-        if (params.recursive && stat.isDirectory()) {
-          listDir(itemPath, basePath);
+    const walk = (dir) => {
+      const items = fs.readdirSync(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory() && params.recursive) {
+          walk(fullPath);
+        } else if (stat.isFile()) {
+          if (!params.pattern || fullPath.match(new RegExp(params.pattern))) {
+            results.push(fullPath);
+          }
         }
-      });
-    }
-    
-    listDir(params.path, params.path);
-    return { files: results, count: results.length };
+      }
+    };
+    walk(params.path);
+    return results;
   }
-});
+};
 
-const shellExecuteTool = new Tool({
-  name: 'shell_execute',
-  description: 'Execute a shell command',
+BUILTIN_TOOLS.file_delete = {
+  name: 'file_delete',
+  description: 'Delete a file or directory',
+  version: '1.0.0',
+  category: 'file',
   parameters: {
-    command: { type: 'string', description: 'Command to execute' },
-    cwd: { type: 'string', description: 'Working directory' },
-    timeout: { type: 'number', description: 'Timeout in milliseconds' }
+    path: { type: 'string', required: true, description: 'Path to delete' },
+    recursive: { type: 'boolean', default: false, description: 'Delete recursively' }
   },
-  required: ['command'],
-  timeout: 60000,
-  handler: async function(params) {
-    return new Promise(function(resolve, reject) {
-      const timeout = params.timeout || 60000;
-      const options = {};
-      if (params.cwd) options.cwd = params.cwd;
-      
+  returns: { type: 'boolean', description: 'Success status' },
+  permissions: ['file:delete'],
+  handler: async (params) => {
+    if (fs.existsSync(params.path)) {
+      if (fs.statSync(params.path).isDirectory()) {
+        fs.rmSync(params.path, { recursive: params.recursive });
+      } else {
+        fs.unlinkSync(params.path);
+      }
+      return true;
+    }
+    return false;
+  }
+};
+
+BUILTIN_TOOLS.code_execute = {
+  name: 'code_execute',
+  description: 'Execute JavaScript code',
+  version: '1.0.0',
+  category: 'code',
+  parameters: {
+    code: { type: 'string', required: true, description: 'JavaScript code to execute' },
+    timeout: { type: 'number', default: 5000, description: 'Execution timeout in ms' }
+  },
+  returns: { type: 'any', description: 'Execution result' },
+  permissions: ['code:execute'],
+  timeout: 10000,
+  handler: async (params) => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Code execution timeout'));
+      }, params.timeout || 5000);
+
       try {
-        const output = execSync(params.command, {
-          ...options,
-          timeout: timeout,
-          encoding: 'utf-8',
-          maxBuffer: 10 * 1024 * 1024
-        });
-        resolve({ stdout: output, stderr: '', exitCode: 0 });
-      } catch (e) {
-        resolve({
-          stdout: e.stdout || '',
-          stderr: e.stderr || e.message,
-          exitCode: e.status || 1
-        });
+        const result = eval(params.code);
+        clearTimeout(timeout);
+        resolve(result);
+      } catch (error) {
+        clearTimeout(timeout);
+        reject(error);
       }
     });
   }
-});
+};
 
-const httpRequestTool = new Tool({
-  name: 'http_request',
-  description: 'Make an HTTP request',
+BUILTIN_TOOLS.api_call = {
+  name: 'api_call',
+  description: 'Make an HTTP API call',
+  version: '1.0.0',
+  category: 'network',
   parameters: {
-    url: { type: 'string', description: 'Request URL' },
-    method: { type: 'string', description: 'HTTP method (GET, POST, etc.)' },
+    url: { type: 'string', required: true, description: 'API URL' },
+    method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], default: 'GET' },
     headers: { type: 'object', description: 'Request headers' },
-    body: { type: 'string', description: 'Request body' },
-    timeout: { type: 'number', description: 'Timeout in milliseconds' }
+    body: { type: 'object', description: 'Request body' },
+    timeout: { type: 'number', default: 30000, description: 'Request timeout in ms' }
   },
-  required: ['url'],
-  timeout: 30000,
-  handler: async function(params) {
-    const http = require('http');
-    const https = require('https');
-    
-    const url = new URL(params.url);
-    const client = url.protocol === 'https:' ? https : http;
-    
+  returns: { type: 'object', description: 'Response data' },
+  permissions: ['network:access'],
+  timeout: 60000,
+  handler: async (params) => {
+    const fetch = global.fetch || require('node-fetch');
     const options = {
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname + url.search,
       method: params.method || 'GET',
-      headers: params.headers || {}
+      headers: params.headers || {},
+      timeout: params.timeout || 30000
     };
 
-    return new Promise(function(resolve, reject) {
-      const timeout = params.timeout || 30000;
-      const req = client.request(options, function(res) {
-        let data = '';
-        res.on('data', function(chunk) { data += chunk; });
-        res.on('end', function() {
-          resolve({
-            statusCode: res.statusCode,
-            headers: res.headers,
-            body: data
-          });
-        });
-      });
+    if (params.body && ['POST', 'PUT', 'PATCH'].includes(options.method)) {
+      options.body = JSON.stringify(params.body);
+      options.headers['Content-Type'] = 'application/json';
+    }
 
-      req.on('error', function(e) { reject(e); });
-      req.setTimeout(timeout, function() {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      if (params.body) req.write(params.body);
-      req.end();
-    });
+    const response = await fetch(params.url, options);
+    const data = await response.json();
+    
+    return {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      data
+    };
   }
-});
+};
 
-const jsonParseTool = new Tool({
+BUILTIN_TOOLS.json_parse = {
   name: 'json_parse',
   description: 'Parse JSON string',
+  version: '1.0.0',
+  category: 'data',
   parameters: {
-    text: { type: 'string', description: 'JSON text to parse' }
+    string: { type: 'string', required: true, description: 'JSON string to parse' }
   },
-  required: ['text'],
-  handler: async function(params) {
-    try {
-      const data = JSON.parse(params.text);
-      return { success: true, data: data };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+  returns: { type: 'any', description: 'Parsed data' },
+  handler: async (params) => {
+    return JSON.parse(params.string);
   }
-});
+};
 
-const jsonStringifyTool = new Tool({
+BUILTIN_TOOLS.json_stringify = {
   name: 'json_stringify',
   description: 'Convert object to JSON string',
+  version: '1.0.0',
+  category: 'data',
   parameters: {
-    data: { type: 'object', description: 'Object to stringify' },
-    pretty: { type: 'boolean', description: 'Pretty print' }
+    object: { type: 'object', required: true, description: 'Object to stringify' },
+    pretty: { type: 'boolean', default: false, description: 'Pretty print' }
   },
-  required: ['data'],
-  handler: async function(params) {
-    try {
-      const json = params.pretty 
-        ? JSON.stringify(params.data, null, 2)
-        : JSON.stringify(params.data);
-      return { success: true, json: json };
-    } catch (e) {
-      return { success: false, error: e.message };
+  returns: { type: 'string', description: 'JSON string' },
+  handler: async (params) => {
+    return JSON.stringify(params.object, null, params.pretty ? 2 : 0);
+  }
+};
+
+BUILTIN_TOOLS.text_process = {
+  name: 'text_process',
+  description: 'Process text with various operations',
+  version: '1.0.0',
+  category: 'text',
+  parameters: {
+    text: { type: 'string', required: true, description: 'Text to process' },
+    operation: { 
+      type: 'string', 
+      required: true,
+      enum: ['uppercase', 'lowercase', 'trim', 'split', 'join', 'replace', 'regex'],
+      description: 'Operation to perform' 
+    },
+    options: { type: 'object', description: 'Operation options' }
+  },
+  returns: { type: 'any', description: 'Processed result' },
+  handler: async (params) => {
+    const { text, operation, options = {} } = params;
+    
+    switch (operation) {
+      case 'uppercase':
+        return text.toUpperCase();
+      case 'lowercase':
+        return text.toLowerCase();
+      case 'trim':
+        return text.trim();
+      case 'split':
+        return text.split(options.separator || ' ');
+      case 'join':
+        return Array.isArray(text) ? text.join(options.separator || ' ') : text;
+      case 'replace':
+        return text.replace(new RegExp(options.pattern, options.flags || 'g'), options.replacement || '');
+      case 'regex':
+        const matches = text.match(new RegExp(options.pattern, options.flags));
+        return options.fullMatch ? matches : (matches ? matches[0] : null);
+      default:
+        return text;
     }
   }
-});
+};
 
-const textSearchTool = new Tool({
-  name: 'text_search',
-  description: 'Search for pattern in text',
+BUILTIN_TOOLS.shell_exec = {
+  name: 'shell_exec',
+  description: 'Execute a shell command',
+  version: '1.0.0',
+  category: 'system',
   parameters: {
-    text: { type: 'string', description: 'Text to search in' },
-    pattern: { type: 'string', description: 'Pattern to search for' },
-    flags: { type: 'string', description: 'Regex flags (i, g, m)' }
+    command: { type: 'string', required: true, description: 'Command to execute' },
+    cwd: { type: 'string', description: 'Working directory' },
+    timeout: { type: 'number', default: 30000, description: 'Execution timeout' }
   },
-  required: ['text', 'pattern'],
-  handler: async function(params) {
-    try {
-      const flags = params.flags || 'g';
-      const regex = new RegExp(params.pattern, flags);
-      const matches = [];
-      let match;
-      const re = new RegExp(params.pattern, flags);
-      while ((match = re.exec(params.text)) !== null) {
-        matches.push({
-          match: match[0],
-          index: match.index,
-          groups: match.slice(1)
+  returns: { type: 'object', description: 'Execution result with stdout, stderr, exitCode' },
+  permissions: ['system:exec'],
+  timeout: 60000,
+  handler: async (params) => {
+    const { exec } = require('child_process');
+    
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Command execution timeout'));
+      }, params.timeout || 30000);
+
+      exec(params.command, { cwd: params.cwd }, (error, stdout, stderr) => {
+        clearTimeout(timeout);
+        resolve({
+          stdout: stdout.toString(),
+          stderr: stderr.toString(),
+          exitCode: error ? error.code : 0,
+          success: !error
         });
-        if (!flags.includes('g')) break;
-      }
-      return { success: true, matches: matches, count: matches.length };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+      });
+    });
   }
-});
-
-const textReplaceTool = new Tool({
-  name: 'text_replace',
-  description: 'Replace pattern in text',
-  parameters: {
-    text: { type: 'string', description: 'Original text' },
-    pattern: { type: 'string', description: 'Pattern to replace' },
-    replacement: { type: 'string', description: 'Replacement text' },
-    flags: { type: 'string', description: 'Regex flags' }
-  },
-  required: ['text', 'pattern', 'replacement'],
-  handler: async function(params) {
-    try {
-      const flags = params.flags || 'g';
-      const regex = new RegExp(params.pattern, flags);
-      const result = params.text.replace(regex, params.replacement);
-      return { success: true, result: result };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
-  }
-});
-
-// Tool Manager
-class ToolManager {
-  constructor() {
-    this.registry = new ToolRegistry();
-    this.registerBuiltInTools();
-  }
-
-  registerBuiltInTools() {
-    this.registry.register(fileReadTool);
-    this.registry.register(fileWriteTool);
-    this.registry.register(fileExistsTool);
-    this.registry.register(directoryListTool);
-    this.registry.register(shellExecuteTool);
-    this.registry.register(httpRequestTool);
-    this.registry.register(jsonParseTool);
-    this.registry.register(jsonStringifyTool);
-    this.registry.register(textSearchTool);
-    this.registry.register(textReplaceTool);
-
-    // Categorize tools
-    this.registry.categorize('file_read', 'filesystem');
-    this.registry.categorize('file_write', 'filesystem');
-    this.registry.categorize('file_exists', 'filesystem');
-    this.registry.categorize('directory_list', 'filesystem');
-    this.registry.categorize('shell_execute', 'system');
-    this.registry.categorize('http_request', 'network');
-    this.registry.categorize('json_parse', 'data');
-    this.registry.categorize('json_stringify', 'data');
-    this.registry.categorize('text_search', 'text');
-    this.registry.categorize('text_replace', 'text');
-  }
-
-  registerTool(config) {
-    return this.registry.register(config);
-  }
-
-  getTool(name) {
-    return this.registry.get(name);
-  }
-
-  listTools() {
-    return this.registry.list();
-  }
-
-  async executeTool(name, params) {
-    return await this.registry.execute(name, params);
-  }
-
-  getToolSchema() {
-    return this.registry.getSchema();
-  }
-}
-
-// Create tool from function
-function createTool(name, description, handler, parameters, required) {
-  return new Tool({
-    name: name,
-    description: description,
-    parameters: parameters || {},
-    required: required || [],
-    handler: handler
-  });
-}
+};
 
 module.exports = {
-  Tool,
+  ToolDefinition,
   ToolRegistry,
-  ToolManager,
-  createTool,
-  // Built-in tools
-  fileReadTool,
-  fileWriteTool,
-  fileExistsTool,
-  directoryListTool,
-  shellExecuteTool,
-  httpRequestTool,
-  jsonParseTool,
-  jsonStringifyTool,
-  textSearchTool,
-  textReplaceTool
+  BUILTIN_TOOLS,
+  TOOL_STATUS
 };

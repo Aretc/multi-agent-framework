@@ -349,6 +349,201 @@ function createApp(options) {
     }
   });
 
+  app.post('/api/tools/:name/enable', async function(req, res) {
+    try {
+      const result = framework.enableTool(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/tools/:name/disable', async function(req, res) {
+    try {
+      const result = framework.disableTool(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/tools/stats', function(req, res) {
+    const stats = framework.getToolStats();
+    res.json({ success: true, data: stats });
+  });
+
+  // Skills
+  app.get('/api/skills', function(req, res) {
+    const skills = framework.listSkills();
+    res.json({ success: true, data: skills });
+  });
+
+  app.get('/api/skills/:name', function(req, res) {
+    const skill = framework.getSkill(req.params.name);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Skill not found' });
+    }
+    res.json({ success: true, data: skill });
+  });
+
+  app.post('/api/skills/install', async function(req, res) {
+    try {
+      const skill = await framework.installSkill(req.body);
+      res.json({ success: true, data: skill });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/skills/:name/enable', async function(req, res) {
+    try {
+      const result = framework.enableSkill(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/skills/:name/disable', async function(req, res) {
+    try {
+      const result = framework.disableSkill(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/skills/:name/execute', async function(req, res) {
+    try {
+      const result = await framework.executeSkill(req.params.name, req.body.input);
+      res.json({ success: true, data: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/skills/:name', async function(req, res) {
+    try {
+      const result = await framework.uninstallSkill(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/skills/stats', function(req, res) {
+    const stats = framework.getSkillStats();
+    res.json({ success: true, data: stats });
+  });
+
+  // Rules
+  app.get('/api/rules', function(req, res) {
+    const rules = framework.listRules();
+    res.json({ success: true, data: rules });
+  });
+
+  app.get('/api/rules/:name', function(req, res) {
+    const rule = framework.getRule(req.params.name);
+    if (!rule) {
+      return res.status(404).json({ success: false, error: 'Rule not found' });
+    }
+    res.json({ success: true, data: rule });
+  });
+
+  app.post('/api/rules', async function(req, res) {
+    try {
+      const rule = framework.registerRule(req.body);
+      res.json({ success: true, data: rule });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/rules/:name/enable', async function(req, res) {
+    try {
+      const result = framework.enableRule(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/rules/:name/disable', async function(req, res) {
+    try {
+      const result = framework.disableRule(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/rules/validate', async function(req, res) {
+    try {
+      const result = await framework.validateWithRules(req.body.data);
+      res.json({ success: true, data: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/rules/stats', function(req, res) {
+    const stats = framework.getRuleStats();
+    res.json({ success: true, data: stats });
+  });
+
+  // MCP
+  app.get('/api/mcp/clients', function(req, res) {
+    const clients = framework.listMCPClients();
+    res.json({ success: true, data: clients });
+  });
+
+  app.post('/api/mcp/clients', async function(req, res) {
+    try {
+      const client = await framework.addMCPClient(req.body.name, req.body.config);
+      res.json({ success: true, data: client.getStatus() });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/mcp/clients/:name', async function(req, res) {
+    try {
+      const result = await framework.removeMCPClient(req.params.name);
+      res.json({ success: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/mcp/tools', function(req, res) {
+    const tools = framework.getAllMCPTools();
+    res.json({ success: true, data: tools });
+  });
+
+  app.get('/api/mcp/resources', function(req, res) {
+    const resources = framework.getAllMCPResources();
+    res.json({ success: true, data: resources });
+  });
+
+  app.get('/api/mcp/prompts', function(req, res) {
+    const prompts = framework.getAllMCPPrompts();
+    res.json({ success: true, data: prompts });
+  });
+
+  app.post('/api/mcp/execute', async function(req, res) {
+    try {
+      const result = await framework.callMCPTool(req.body.client, req.body.tool, req.body.args);
+      res.json({ success: true, data: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/mcp/stats', function(req, res) {
+    const stats = framework.getMCPStats();
+    res.json({ success: true, data: stats });
+  });
+
   // Config
   app.get('/api/config', function(req, res) {
     res.json({ success: true, data: framework.config });

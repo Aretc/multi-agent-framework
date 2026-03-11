@@ -13,7 +13,10 @@ const path = require('path');
 const fs = require('fs');
 const { MemoryManager, AgentMemory } = require('./memory');
 const { createLLMAdapter } = require('./llm/adapter');
-const { ToolManager } = require('./tools');
+const { ToolRegistry, BUILTIN_TOOLS, TOOL_STATUS } = require('./tools');
+const { SkillRegistry, SKILL_STATUS } = require('./skills');
+const { RuleEngine, RULE_STATUS, RULE_TYPES, RULE_PRIORITY, BUILTIN_RULES } = require('./rules');
+const { MCPManager, MCPClient, MCP_CONNECTION_STATUS } = require('./mcp');
 const { AgentRuntime } = require('./agent');
 const { SessionManager, Session, SESSION_STATUS } = require('./session');
 const { DynamicAgentFactory, DynamicAgent, AGENT_TYPES, AGENT_TEMPLATES } = require('./dynamic-agent');
@@ -86,7 +89,29 @@ class MultiAgentFramework {
     }
     
     if (this.config.tools && this.config.tools.enabled) {
-      this.toolManager = new ToolManager();
+      this.toolRegistry = new ToolRegistry({
+        storagePath: path.join(this.rootDir, '.maf', 'tools')
+      });
+    }
+    
+    if (this.config.skills && this.config.skills.enabled) {
+      this.skillRegistry = new SkillRegistry({
+        storagePath: path.join(this.rootDir, '.maf', 'skills'),
+        toolRegistry: this.toolRegistry
+      });
+    }
+    
+    if (this.config.rules && this.config.rules.enabled) {
+      this.ruleEngine = new RuleEngine({
+        storagePath: path.join(this.rootDir, '.maf', 'rules')
+      });
+    }
+    
+    if (this.config.mcp && this.config.mcp.enabled) {
+      this.mcpManager = new MCPManager({
+        configPath: path.join(this.rootDir, '.maf', 'mcp-config.json'),
+        toolRegistry: this.toolRegistry
+      });
     }
     
     if (this.config.orchestrator && this.config.orchestrator.enabled) {
@@ -918,6 +943,268 @@ class MultiAgentFramework {
   getActiveSessions() {
     return this.sessionManager.getActiveSessions();
   }
+
+  // ========== TOOL SYSTEM METHODS ==========
+
+  async initTools() {
+    if (this.toolRegistry) {
+      await this.toolRegistry.init();
+    }
+    return this;
+  }
+
+  registerTool(definition) {
+    if (!this.toolRegistry) {
+      this.toolRegistry = new ToolRegistry({
+        storagePath: path.join(this.rootDir, '.maf', 'tools')
+      });
+    }
+    return this.toolRegistry.register(definition);
+  }
+
+  unregisterTool(name) {
+    return this.toolRegistry ? this.toolRegistry.unregister(name) : false;
+  }
+
+  getTool(name) {
+    return this.toolRegistry ? this.toolRegistry.get(name) : null;
+  }
+
+  listTools(options) {
+    return this.toolRegistry ? this.toolRegistry.list(options) : [];
+  }
+
+  async executeTool(name, params, context) {
+    if (!this.toolRegistry) {
+      throw new Error('Tool system not initialized');
+    }
+    return await this.toolRegistry.execute(name, params, context);
+  }
+
+  enableTool(name) {
+    return this.toolRegistry ? this.toolRegistry.enable(name) : false;
+  }
+
+  disableTool(name) {
+    return this.toolRegistry ? this.toolRegistry.disable(name) : false;
+  }
+
+  getToolStats() {
+    return this.toolRegistry ? this.toolRegistry.getStats() : null;
+  }
+
+  // ========== SKILL SYSTEM METHODS ==========
+
+  async initSkills() {
+    if (this.skillRegistry) {
+      await this.skillRegistry.init();
+    }
+    return this;
+  }
+
+  async installSkill(definition, source) {
+    if (!this.skillRegistry) {
+      this.skillRegistry = new SkillRegistry({
+        storagePath: path.join(this.rootDir, '.maf', 'skills'),
+        toolRegistry: this.toolRegistry,
+        ruleEngine: this.ruleEngine
+      });
+    }
+    return await this.skillRegistry.install(definition, source);
+  }
+
+  async uninstallSkill(name) {
+    return this.skillRegistry ? await this.skillRegistry.uninstall(name) : false;
+  }
+
+  getSkill(name) {
+    return this.skillRegistry ? this.skillRegistry.get(name) : null;
+  }
+
+  listSkills(options) {
+    return this.skillRegistry ? this.skillRegistry.list(options) : [];
+  }
+
+  async executeSkill(name, input, context) {
+    if (!this.skillRegistry) {
+      throw new Error('Skill system not initialized');
+    }
+    return await this.skillRegistry.execute(name, input, context);
+  }
+
+  enableSkill(name) {
+    return this.skillRegistry ? this.skillRegistry.enable(name) : false;
+  }
+
+  disableSkill(name) {
+    return this.skillRegistry ? this.skillRegistry.disable(name) : false;
+  }
+
+  configureSkill(name, config) {
+    return this.skillRegistry ? this.skillRegistry.configure(name, config) : null;
+  }
+
+  async createSkillFromTemplate(name, template) {
+    if (!this.skillRegistry) {
+      this.skillRegistry = new SkillRegistry({
+        storagePath: path.join(this.rootDir, '.maf', 'skills'),
+        toolRegistry: this.toolRegistry
+      });
+    }
+    return await this.skillRegistry.createFromTemplate(name, template);
+  }
+
+  searchSkills(query) {
+    return this.skillRegistry ? this.skillRegistry.search(query) : [];
+  }
+
+  getSkillStats() {
+    return this.skillRegistry ? this.skillRegistry.getStats() : null;
+  }
+
+  // ========== RULE ENGINE METHODS ==========
+
+  async initRules() {
+    if (this.ruleEngine) {
+      await this.ruleEngine.init();
+    }
+    return this;
+  }
+
+  registerRule(definition) {
+    if (!this.ruleEngine) {
+      this.ruleEngine = new RuleEngine({
+        storagePath: path.join(this.rootDir, '.maf', 'rules')
+      });
+    }
+    return this.ruleEngine.register(definition);
+  }
+
+  unregisterRule(name) {
+    return this.ruleEngine ? this.ruleEngine.unregister(name) : false;
+  }
+
+  getRule(name) {
+    return this.ruleEngine ? this.ruleEngine.get(name) : null;
+  }
+
+  listRules(options) {
+    return this.ruleEngine ? this.ruleEngine.list(options) : [];
+  }
+
+  async evaluateRules(data, options) {
+    if (!this.ruleEngine) {
+      throw new Error('Rule engine not initialized');
+    }
+    return await this.ruleEngine.evaluate(data, options);
+  }
+
+  async validateWithRules(data, options) {
+    return this.ruleEngine ? await this.ruleEngine.validate(data, options) : { valid: true, failures: [] };
+  }
+
+  async checkConstraints(data, options) {
+    return this.ruleEngine ? await this.ruleEngine.checkConstraints(data, options) : { satisfied: true, violations: [] };
+  }
+
+  async triggerRules(event, data) {
+    return this.ruleEngine ? await this.ruleEngine.trigger(event, data) : [];
+  }
+
+  async guardAction(action, data) {
+    return this.ruleEngine ? await this.ruleEngine.guard(action, data) : { allowed: true };
+  }
+
+  enableRule(name) {
+    return this.ruleEngine ? this.ruleEngine.enable(name) : false;
+  }
+
+  disableRule(name) {
+    return this.ruleEngine ? this.ruleEngine.disable(name) : false;
+  }
+
+  getRuleStats() {
+    return this.ruleEngine ? this.ruleEngine.getStats() : null;
+  }
+
+  // ========== MCP METHODS ==========
+
+  async initMCP() {
+    if (this.mcpManager) {
+      await this.mcpManager.init();
+    }
+    return this;
+  }
+
+  async addMCPClient(name, config) {
+    if (!this.mcpManager) {
+      this.mcpManager = new MCPManager({
+        configPath: path.join(this.rootDir, '.maf', 'mcp-config.json'),
+        toolRegistry: this.toolRegistry
+      });
+    }
+    return await this.mcpManager.addClient(name, config);
+  }
+
+  async removeMCPClient(name) {
+    return this.mcpManager ? await this.mcpManager.removeClient(name) : false;
+  }
+
+  getMCPClient(name) {
+    return this.mcpManager ? this.mcpManager.getClient(name) : null;
+  }
+
+  listMCPClients() {
+    return this.mcpManager ? this.mcpManager.listClients() : [];
+  }
+
+  async callMCPTool(clientName, toolName, args) {
+    if (!this.mcpManager) {
+      throw new Error('MCP system not initialized');
+    }
+    return await this.mcpManager.callTool(clientName, toolName, args);
+  }
+
+  async readMCPResource(clientName, uri) {
+    if (!this.mcpManager) {
+      throw new Error('MCP system not initialized');
+    }
+    return await this.mcpManager.readResource(clientName, uri);
+  }
+
+  async getMCPPrompt(clientName, promptName, args) {
+    if (!this.mcpManager) {
+      throw new Error('MCP system not initialized');
+    }
+    return await this.mcpManager.getPrompt(clientName, promptName, args);
+  }
+
+  getAllMCPTools() {
+    return this.mcpManager ? this.mcpManager.getAllTools() : [];
+  }
+
+  getAllMCPResources() {
+    return this.mcpManager ? this.mcpManager.getAllResources() : [];
+  }
+
+  getAllMCPPrompts() {
+    return this.mcpManager ? this.mcpManager.getAllPrompts() : [];
+  }
+
+  getMCPStats() {
+    return this.mcpManager ? this.mcpManager.getStats() : null;
+  }
+
+  // ========== INITIALIZATION ==========
+
+  async initialize() {
+    if (this.toolRegistry) await this.toolRegistry.init();
+    if (this.skillRegistry) await this.skillRegistry.init();
+    if (this.ruleEngine) await this.ruleEngine.init();
+    if (this.mcpManager) await this.mcpManager.init();
+    if (this.orchestrator) await this.orchestrator.initialize();
+    return this;
+  }
 }
 
 module.exports = { 
@@ -926,7 +1213,19 @@ module.exports = {
   MemoryManager: require('./memory').MemoryManager,
   AgentMemory: require('./memory').AgentMemory,
   createLLMAdapter: require('./llm/adapter').createLLMAdapter,
-  ToolManager: require('./tools').ToolManager,
+  ToolRegistry: require('./tools').ToolRegistry,
+  BUILTIN_TOOLS: require('./tools').BUILTIN_TOOLS,
+  TOOL_STATUS: require('./tools').TOOL_STATUS,
+  SkillRegistry: require('./skills').SkillRegistry,
+  SKILL_STATUS: require('./skills').SKILL_STATUS,
+  RuleEngine: require('./rules').RuleEngine,
+  RULE_STATUS: require('./rules').RULE_STATUS,
+  RULE_TYPES: require('./rules').RULE_TYPES,
+  RULE_PRIORITY: require('./rules').RULE_PRIORITY,
+  BUILTIN_RULES: require('./rules').BUILTIN_RULES,
+  MCPManager: require('./mcp').MCPManager,
+  MCPClient: require('./mcp').MCPClient,
+  MCP_CONNECTION_STATUS: require('./mcp').MCP_CONNECTION_STATUS,
   AgentRuntime: require('./agent').AgentRuntime,
   SessionManager: require('./session').SessionManager,
   Session: require('./session').Session,

@@ -96,6 +96,40 @@ const translations = {
     language: 'Language',
     english: 'English',
     chinese: '中文',
+    
+    // Tools
+    tools: 'Tools',
+    toolsPanel: 'Tools',
+    toolName: 'Name',
+    toolCategory: 'Category',
+    toolStatus: 'Status',
+    toolExecutions: 'Executions',
+    enable: 'Enable',
+    disable: 'Disable',
+    noTools: 'No tools available',
+    
+    // Skills
+    skills: 'Skills',
+    skillsPanel: 'Skills',
+    skillVersion: 'Version',
+    skillAuthor: 'Author',
+    noSkills: 'No skills installed',
+    installSkill: 'Install Skill',
+    
+    // Rules
+    rules: 'Rules',
+    rulesPanel: 'Rules',
+    ruleType: 'Type',
+    rulePriority: 'Priority',
+    noRules: 'No rules defined',
+    
+    // MCP
+    mcp: 'MCP',
+    mcpPanel: 'MCP Clients',
+    mcpConnected: 'Connected',
+    mcpDisconnected: 'Disconnected',
+    noMCPClients: 'No MCP clients configured',
+    addClient: 'Add Client',
   },
   zh: {
     // Navigation
@@ -186,6 +220,40 @@ const translations = {
     language: '语言',
     english: 'English',
     chinese: '中文',
+    
+    // Tools
+    tools: '工具',
+    toolsPanel: '工具',
+    toolName: '名称',
+    toolCategory: '分类',
+    toolStatus: '状态',
+    toolExecutions: '执行次数',
+    enable: '启用',
+    disable: '禁用',
+    noTools: '暂无工具',
+    
+    // Skills
+    skills: '技能',
+    skillsPanel: '技能',
+    skillVersion: '版本',
+    skillAuthor: '作者',
+    noSkills: '暂无已安装的技能',
+    installSkill: '安装技能',
+    
+    // Rules
+    rules: '规则',
+    rulesPanel: '规则',
+    ruleType: '类型',
+    rulePriority: '优先级',
+    noRules: '暂无定义的规则',
+    
+    // MCP
+    mcp: 'MCP',
+    mcpPanel: 'MCP 客户端',
+    mcpConnected: '已连接',
+    mcpDisconnected: '已断开',
+    noMCPClients: '暂无配置的 MCP 客户端',
+    addClient: '添加客户端',
   }
 };
 
@@ -580,6 +648,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [orchestratorStatus, setOrchestratorStatus] = useState({});
   const [clarificationInput, setClarificationInput] = useState('');
+  
+  const [tools, setTools] = useState([]);
+  const [skills, setSkills] = useState([]);
+  const [rules, setRules] = useState([]);
+  const [mcpClients, setMcpClients] = useState([]);
 
   const t = translations[lang];
 
@@ -642,6 +715,26 @@ function App() {
       .then(res => res.json())
       .then(data => { if (data.success) setOrchestratorStatus(data.data || {}); })
       .catch(e => addLog('error', `Failed to fetch orchestrator status: ${e.message}`));
+    
+    fetch(`${API_BASE}/tools`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setTools(data.data || []); })
+      .catch(e => addLog('error', `Failed to fetch tools: ${e.message}`));
+    
+    fetch(`${API_BASE}/skills`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setSkills(data.data || []); })
+      .catch(e => addLog('error', `Failed to fetch skills: ${e.message}`));
+    
+    fetch(`${API_BASE}/rules`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setRules(data.data || []); })
+      .catch(e => addLog('error', `Failed to fetch rules: ${e.message}`));
+    
+    fetch(`${API_BASE}/mcp/clients`)
+      .then(res => res.json())
+      .then(data => { if (data.success) setMcpClients(data.data || []); })
+      .catch(e => addLog('error', `Failed to fetch MCP clients: ${e.message}`));
   }, [addLog]);
 
   useEffect(() => {
@@ -949,18 +1042,205 @@ function App() {
     </div>
   );
 
+  const renderTools = () => (
+    <div style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.toolsPanel} ({tools.length})</span>
+      </div>
+      <div style={styles.panelBody}>
+        {tools.length === 0 ? (
+          <div style={styles.empty}>{t.noTools}</div>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>{t.toolName}</th>
+                <th style={styles.th}>{t.toolCategory}</th>
+                <th style={styles.th}>{t.toolStatus}</th>
+                <th style={styles.th}>{t.toolExecutions}</th>
+                <th style={styles.th}>{t.actions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tools.map(tool => (
+                <tr key={tool.name}>
+                  <td style={styles.td}>
+                    <strong>{tool.name}</strong>
+                    <div style={{ fontSize: '11px', color: '#888' }}>{tool.description}</div>
+                  </td>
+                  <td style={styles.td}>{tool.category}</td>
+                  <td style={styles.td}>
+                    <span style={{ ...styles.badge, background: tool.status === 'registered' ? 'rgba(46,213,115,0.2)' : tool.status === 'disabled' ? 'rgba(136,136,136,0.2)' : 'rgba(255,165,2,0.2)', color: tool.status === 'registered' ? '#2ed573' : tool.status === 'disabled' ? '#888' : '#ffa502' }}>
+                      {tool.status}
+                    </span>
+                  </td>
+                  <td style={styles.td}>{tool.useCount || 0}</td>
+                  <td style={styles.td}>
+                    {tool.status === 'disabled' ? (
+                      <button style={{ ...styles.btn, ...styles.btnSecondary, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/enable`, { method: 'POST' }).then(() => fetchData())}>{t.enable}</button>
+                    ) : (
+                      <button style={{ ...styles.btn, ...styles.btnDanger, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/tools/${tool.name}/disable`, { method: 'POST' }).then(() => fetchData())}>{t.disable}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSkills = () => (
+    <div style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.skillsPanel} ({skills.length})</span>
+      </div>
+      <div style={styles.panelBody}>
+        {skills.length === 0 ? (
+          <div style={styles.empty}>{t.noSkills}</div>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>{t.name}</th>
+                <th style={styles.th}>{t.skillVersion}</th>
+                <th style={styles.th}>{t.type}</th>
+                <th style={styles.th}>{t.status}</th>
+                <th style={styles.th}>{t.actions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {skills.map(skill => (
+                <tr key={skill.name}>
+                  <td style={styles.td}>
+                    <strong>{skill.name}</strong>
+                    <div style={{ fontSize: '11px', color: '#888' }}>{skill.description}</div>
+                  </td>
+                  <td style={styles.td}>v{skill.version}</td>
+                  <td style={styles.td}>{skill.category}</td>
+                  <td style={styles.td}>
+                    <span style={{ ...styles.badge, background: skill.enabled ? 'rgba(46,213,115,0.2)' : 'rgba(136,136,136,0.2)', color: skill.enabled ? '#2ed573' : '#888' }}>
+                      {skill.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    {skill.enabled ? (
+                      <button style={{ ...styles.btn, ...styles.btnDanger, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/skills/${skill.name}/disable`, { method: 'POST' }).then(() => fetchData())}>{t.disable}</button>
+                    ) : (
+                      <button style={{ ...styles.btn, ...styles.btnSecondary, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/skills/${skill.name}/enable`, { method: 'POST' }).then(() => fetchData())}>{t.enable}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderRules = () => (
+    <div style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.rulesPanel} ({rules.length})</span>
+      </div>
+      <div style={styles.panelBody}>
+        {rules.length === 0 ? (
+          <div style={styles.empty}>{t.noRules}</div>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>{t.name}</th>
+                <th style={styles.th}>{t.ruleType}</th>
+                <th style={styles.th}>{t.rulePriority}</th>
+                <th style={styles.th}>{t.status}</th>
+                <th style={styles.th}>{t.actions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map(rule => (
+                <tr key={rule.name}>
+                  <td style={styles.td}>
+                    <strong>{rule.name}</strong>
+                    <div style={{ fontSize: '11px', color: '#888' }}>{rule.description}</div>
+                  </td>
+                  <td style={styles.td}>{rule.type}</td>
+                  <td style={styles.td}>{rule.priority}</td>
+                  <td style={styles.td}>
+                    <span style={{ ...styles.badge, background: rule.enabled ? 'rgba(46,213,115,0.2)' : 'rgba(136,136,136,0.2)', color: rule.enabled ? '#2ed573' : '#888' }}>
+                      {rule.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    {rule.enabled ? (
+                      <button style={{ ...styles.btn, ...styles.btnDanger, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/rules/${rule.name}/disable`, { method: 'POST' }).then(() => fetchData())}>{t.disable}</button>
+                    ) : (
+                      <button style={{ ...styles.btn, ...styles.btnSecondary, padding: '4px 8px', fontSize: '12px' }} onClick={() => fetch(`${API_BASE}/rules/${rule.name}/enable`, { method: 'POST' }).then(() => fetchData())}>{t.enable}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderMCP = () => (
+    <div style={styles.panel}>
+      <div style={styles.panelHeader}>
+        <span style={styles.panelTitle}>{t.mcpPanel} ({mcpClients.length})</span>
+      </div>
+      <div style={styles.panelBody}>
+        {mcpClients.length === 0 ? (
+          <div style={styles.empty}>{t.noMCPClients}</div>
+        ) : (
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>{t.name}</th>
+                <th style={styles.th}>{t.status}</th>
+                <th style={styles.th}>Tools</th>
+                <th style={styles.th}>Resources</th>
+                <th style={styles.th}>Prompts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mcpClients.map(client => (
+                <tr key={client.name}>
+                  <td style={styles.td}><strong>{client.name}</strong></td>
+                  <td style={styles.td}>
+                    <span style={{ ...styles.badge, background: client.status === 'connected' ? 'rgba(46,213,115,0.2)' : 'rgba(255,71,87,0.2)', color: client.status === 'connected' ? '#2ed573' : '#ff4757' }}>
+                      {client.status === 'connected' ? t.mcpConnected : t.mcpDisconnected}
+                    </span>
+                  </td>
+                  <td style={styles.td}>{client.toolsCount}</td>
+                  <td style={styles.td}>{client.resourcesCount}</td>
+                  <td style={styles.td}>{client.promptsCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.logo}>🤖 MAF Dashboard</div>
         <nav style={styles.nav}>
-          {['dashboard', 'agents', 'tasks', 'sessions'].map(v => (
+          {['dashboard', 'agents', 'tasks', 'sessions', 'tools', 'skills', 'rules', 'mcp'].map(v => (
             <button
               key={v}
               style={{ ...styles.navBtn, ...(view === v ? styles.navBtnActive : {}) }}
               onClick={() => setView(v)}
             >
-              {t[v]}
+              {t[v] || v}
             </button>
           ))}
           <button
@@ -977,6 +1257,10 @@ function App() {
         {view === 'agents' && renderAgents()}
         {view === 'tasks' && renderTasks()}
         {view === 'sessions' && renderSessions()}
+        {view === 'tools' && renderTools()}
+        {view === 'skills' && renderSkills()}
+        {view === 'rules' && renderRules()}
+        {view === 'mcp' && renderMCP()}
       </main>
     </div>
   );
