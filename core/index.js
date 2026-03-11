@@ -1283,5 +1283,11 @@ module.exports = {
   PromptManager: require('./prompts').PromptManager,
   PromptBuilder: require('./prompts').PromptBuilder,
   PROMPT_CATEGORIES: require('./prompts').PROMPT_CATEGORIES,
-  DEFAULT_TEMPLATES: require('./prompts').DEFAULT_TEMPLATES
+  DEFAULT_TEMPLATES: require('./prompts').DEFAULT_TEMPLATES,
+  IntelligentRouter: require('./router').IntelligentRouter,
+  AgentProfile: require('./router').AgentProfile,
+  TaskProfile: require('./router').TaskProfile,
+  ROUTING_STRATEGIES: require('./router').ROUTING_STRATEGIES,
+  TASK_TYPES: require('./router').TASK_TYPES,
+  AGENT_CAPABILITIES: require('./router').AGENT_CAPABILITIES
 };
