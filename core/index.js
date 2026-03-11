@@ -750,11 +750,10 @@ class MultiAgentFramework {
     const context = this.buildAgentContext(agentName);
     if (context) {
       messages = [
-          { role: 'system', content: context.systemPrompt || 'You are a helpful AI assistant.' },
-          { role: 'system', content: 'Recent context: ' + context.recentMemory.join('\n') },
-          ...messages
-        ];
-      }
+        { role: 'system', content: context.systemPrompt || 'You are a helpful AI assistant.' },
+        { role: 'system', content: 'Recent context: ' + context.recentMemory.join('\n') },
+        ...messages
+      ];
     }
 
     const response = await llm.stream(messages, onChunk, options);
