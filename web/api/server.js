@@ -659,6 +659,59 @@ function startServer(port, rootDir) {
     console.log('Press Ctrl+C to stop the server');
   });
 
+  async function gracefulShutdown(signal) {
+    console.log('\n\nReceived ' + signal + '. Saving data and shutting down gracefully...');
+    
+    try {
+      if (framework.saveConfig) {
+        framework.saveConfig();
+        console.log('Configuration saved.');
+      }
+      
+      if (framework.sessionManager) {
+        const sessions = framework.sessionManager.listSessions();
+        for (const session of sessions) {
+          try {
+            await framework.sessionManager.saveSession(session.id);
+          } catch (e) {}
+        }
+        console.log('Sessions saved: ' + sessions.length);
+      }
+      
+      if (framework.orchestrator && framework.orchestrator.tasks) {
+        const taskCount = framework.orchestrator.tasks.size;
+        console.log('Tasks preserved: ' + taskCount);
+      }
+      
+      io.close(function() {
+        console.log('WebSocket connections closed.');
+      });
+      
+      server.close(function() {
+        console.log('HTTP server closed.');
+        console.log('Goodbye!');
+        process.exit(0);
+      });
+      
+      setTimeout(function() {
+        console.log('Forced exit after timeout.');
+        process.exit(1);
+      }, 5000);
+      
+    } catch (e) {
+      console.error('Error during shutdown:', e.message);
+      process.exit(1);
+    }
+  }
+
+  process.on('SIGINT', function() { gracefulShutdown('SIGINT'); });
+  process.on('SIGTERM', function() { gracefulShutdown('SIGTERM'); });
+  
+  process.on('uncaughtException', function(err) {
+    console.error('Uncaught Exception:', err.message);
+    gracefulShutdown('uncaughtException');
+  });
+
   return { server: server, io: io, framework: framework };
 }
 

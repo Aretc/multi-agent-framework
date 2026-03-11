@@ -504,6 +504,24 @@ class SessionManager {
     });
     await Promise.all(promises);
   }
+
+  async saveSession(id) {
+    const session = this.sessions.get(id);
+    if (session) {
+      await session.save();
+      return true;
+    }
+    return false;
+  }
+
+  async saveAllSessions() {
+    const promises = [];
+    this.sessions.forEach(function(session) {
+      promises.push(session.save());
+    });
+    await Promise.all(promises);
+    return this.sessions.size;
+  }
 }
 
 module.exports = {
