@@ -654,6 +654,108 @@ function createApp(options) {
     res.json({ success: true, data: framework.config });
   });
 
+  // External AI Tools
+  const { createExternalToolManager } = require('../../core/external-tools');
+  const externalToolManager = createExternalToolManager();
+
+  app.get('/api/external-tools', function(req, res) {
+    const tools = externalToolManager.listTools();
+    res.json({ success: true, data: tools });
+  });
+
+  app.post('/api/external-tools/register', function(req, res) {
+    try {
+      const tool = externalToolManager.registerTool(req.body);
+      res.json({ success: true, data: tool.getStatus() });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/external-tools/:name', function(req, res) {
+    const result = externalToolManager.unregisterTool(req.params.name);
+    res.json({ success: result });
+  });
+
+  app.post('/api/external-tools/:name/execute', async function(req, res) {
+    try {
+      const result = await externalToolManager.executeTask(req.params.name, req.body);
+      res.json({ success: result.success, data: result });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/external-tools/:name/status', function(req, res) {
+    const tool = externalToolManager.getTool(req.params.name);
+    if (!tool) {
+      return res.status(404).json({ success: false, error: 'Tool not found' });
+    }
+    res.json({ success: true, data: tool.getStatus() });
+  });
+
+  app.get('/api/external-tools/:name/history', function(req, res) {
+    const tool = externalToolManager.getTool(req.params.name);
+    if (!tool) {
+      return res.status(404).json({ success: false, error: 'Tool not found' });
+    }
+    res.json({ success: true, data: tool.getHistory() });
+  });
+
+  app.post('/api/external-tools/:name/stop', async function(req, res) {
+    const tool = externalToolManager.getTool(req.params.name);
+    if (!tool) {
+      return res.status(404).json({ success: false, error: 'Tool not found' });
+    }
+    await tool.stop();
+    res.json({ success: true });
+  });
+
+  app.get('/api/external-tools/availability/check', async function(req, res) {
+    try {
+      const results = await externalToolManager.checkAllToolsAvailability();
+      res.json({ success: true, data: results });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.get('/api/external-tools/tasks/history', function(req, res) {
+    const history = externalToolManager.getTaskHistory();
+    res.json({ success: true, data: history });
+  });
+
+  app.get('/api/external-tools/queue', function(req, res) {
+    const queue = externalToolManager.getQueue();
+    res.json({ success: true, data: queue });
+  });
+
+  app.delete('/api/external-tools/queue', function(req, res) {
+    externalToolManager.clearQueue();
+    res.json({ success: true });
+  });
+
+  // External tool events
+  externalToolManager.on('tool:registered', function(data) {
+    io.emit('external-tool:registered', data);
+  });
+
+  externalToolManager.on('tool:start', function(data) {
+    io.emit('external-tool:start', data);
+  });
+
+  externalToolManager.on('tool:complete', function(data) {
+    io.emit('external-tool:complete', data);
+  });
+
+  externalToolManager.on('tool:error', function(data) {
+    io.emit('external-tool:error', data);
+  });
+
+  externalToolManager.on('tool:stdout', function(data) {
+    io.emit('external-tool:stdout', data);
+  });
+
   // Serve frontend - must be after API routes
   app.get('*', function(req, res) {
     const indexPath = path.join(buildPath, 'index.html');

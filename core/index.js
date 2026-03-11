@@ -1288,5 +1288,11 @@ module.exports = {
   TaskProfile: require('./router').TaskProfile,
   ROUTING_STRATEGIES: require('./router').ROUTING_STRATEGIES,
   TASK_TYPES: require('./router').TASK_TYPES,
-  AGENT_CAPABILITIES: require('./router').AGENT_CAPABILITIES
+  AGENT_CAPABILITIES: require('./router').AGENT_CAPABILITIES,
+  ExternalToolManager: require('./external-tools').ExternalToolManager,
+  ClaudeCodeAdapter: require('./external-tools').ClaudeCodeAdapter,
+  TraeAdapter: require('./external-tools').TraeAdapter,
+  CursorAdapter: require('./external-tools').CursorAdapter,
+  CodexAdapter: require('./external-tools').CodexAdapter,
+  TOOL_STATUS: require('./external-tools').TOOL_STATUS
 };
